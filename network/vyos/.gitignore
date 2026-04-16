@@ -1,0 +1,5 @@
+# Rendered config contains secrets - never commit
+.rendered-gateway.conf
+
+# Backups are local artifacts
+backups/

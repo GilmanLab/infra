@@ -1,0 +1,12 @@
+layer: 'scaffolding'
+
+project:
+  title: 'GilmanLab Infra'
+  description: 'Infrastructure configuration, provisioning automation, and repository-level tooling for GilmanLab.'
+  owner: 'GilmanLab'
+  maintainers:
+    - 'josh'
+
+workspace:
+  inheritedTasks:
+    include: []

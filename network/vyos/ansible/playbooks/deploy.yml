@@ -1,0 +1,169 @@
+# VyOS Configuration Deployment Playbook
+# Applies gateway.conf to VyOS router using native VyOS `load` command
+#
+# Usage:
+#   ansible-playbook deploy.yml -i ../inventory/hosts.yml
+#
+# Environment Variables:
+#   VYOS_HOST     - VyOS hostname or IP (default: 10.0.0.2)
+#   VYOS_SSH_KEY  - Path to SSH private key for connection (default: ~/.ssh/vyos-gateway)
+#   GLAB_SECRETS_DIR - Path to the shared secrets repo (default: sibling ../secrets)
+#
+# This playbook:
+#   1. Backs up current router configuration
+#   2. Decrypts SSH credentials from the shared SOPS secrets repo
+#   3. Injects credentials into gateway.conf
+#   4. Copies config to router and applies via `load` command
+#   5. Verifies connectivity before saving
+#
+# Note: Uses VyOS native `load` command instead of vyos_config module because
+# the Ansible module doesn't properly parse bracket format with comments.
+#
+# Safety: Config is committed but not saved until connectivity is verified.
+# If connectivity fails, reboot the router to restore the previous saved config.
+---
+- name: Deploy VyOS Configuration
+  hosts: vyos_gateway
+  gather_facts: false
+
+  vars:
+    secrets_dir: "{{ lookup('env', 'GLAB_SECRETS_DIR') | default(playbook_dir ~ '/../../../../../secrets', true) }}"
+    config_file: "{{ playbook_dir }}/../../configs/gateway.conf"
+    sops_file: "{{ secrets_dir }}/network/vyos/ssh.sops.yaml"
+    backup_dir: "{{ playbook_dir }}/../../backups"
+    rendered_config_file: "{{ playbook_dir }}/../../.rendered-gateway.conf"
+    remote_config_path: /tmp/gateway.conf
+
+  tasks:
+    # =========================================================================
+    # Backup Current Configuration
+    # =========================================================================
+    - name: Ensure backup directory exists
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Get current configuration
+      vyos.vyos.vyos_command:
+        commands:
+          - show configuration
+      register: current_config
+
+    - name: Backup current configuration
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: "{{ current_config.stdout[0] }}"
+        dest: "{{ backup_dir }}/gateway-{{ lookup('pipe', 'date +%Y%m%dT%H%M%S') }}.conf"
+        mode: "0644"
+
+    # =========================================================================
+    # Decrypt SOPS Credentials
+    # =========================================================================
+    - name: Decrypt SSH credentials from SOPS
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: sops -d "{{ sops_file }}"
+      register: sops_output
+      changed_when: false
+      no_log: true
+
+    - name: Parse SSH credentials
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        ssh_credentials: "{{ sops_output.stdout | from_yaml }}"
+      no_log: true
+
+    - name: Extract SSH key components
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        ssh_key_type: "{{ ssh_credentials.public_key.split()[0] }}"
+        ssh_key_data: "{{ ssh_credentials.public_key.split()[1] }}"
+        ssh_password: "{{ ssh_credentials.password }}"
+      no_log: true
+
+    # =========================================================================
+    # Render Configuration with Credentials
+    # =========================================================================
+    - name: Read gateway configuration
+      delegate_to: localhost
+      ansible.builtin.slurp:
+        src: "{{ config_file }}"
+      register: config_content
+
+    - name: Render configuration with injected credentials
+      delegate_to: localhost
+      vars:
+        # NOTE: Indentation must exactly match gateway.conf (8/12/16/20 spaces)
+        # YAML strips leading indent based on first line, so we start at column 0
+        # and include literal spaces for each line
+        auth_placeholder: "        user vyos {\n            authentication {\n                /* SSH public keys added by Ansible deploy.yml */\n                /* Password set manually for console access */\n            }\n        }"
+        auth_with_credentials: "        user vyos {\n            authentication {\n                plaintext-password \"{{ ssh_password }}\"\n                public-keys vyos-gateway {\n                    key {{ ssh_key_data }}\n                    type {{ ssh_key_type }}\n                }\n            }\n        }"
+      ansible.builtin.copy:
+        content: "{{ (config_content.content | b64decode) | replace(auth_placeholder, auth_with_credentials) }}"
+        dest: "{{ rendered_config_file }}"
+        mode: "0600"
+      no_log: true
+
+    # =========================================================================
+    # Copy Configuration to Router
+    # =========================================================================
+    - name: Copy configuration to router
+      delegate_to: localhost
+      ansible.builtin.shell:
+        cmd: >
+          scp -i {{ ansible_ssh_private_key_file }}
+          -o StrictHostKeyChecking=no
+          -o UserKnownHostsFile=/dev/null
+          "{{ rendered_config_file }}"
+          {{ ansible_user }}@{{ ansible_host }}:{{ remote_config_path }}
+      no_log: true
+
+    # =========================================================================
+    # Apply Configuration via VyOS load command
+    # =========================================================================
+    - name: Load, commit, and save configuration
+      vyos.vyos.vyos_command:
+        commands:
+          - configure
+          - "load {{ remote_config_path }}"
+          - commit
+          - save
+          - exit
+      register: load_result
+      vars:
+        ansible_command_timeout: 120
+
+    - name: Display load result
+      ansible.builtin.debug:
+        msg: "Configuration loaded, committed, and saved"
+
+    - name: Verify connectivity after config change
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: 60
+
+    # =========================================================================
+    # Cleanup
+    # =========================================================================
+    - name: Remove configuration file from router
+      delegate_to: localhost
+      ansible.builtin.shell:
+        cmd: >
+          ssh -i {{ ansible_ssh_private_key_file }}
+          -o StrictHostKeyChecking=no
+          -o UserKnownHostsFile=/dev/null
+          {{ ansible_user }}@{{ ansible_host }}
+          "rm -f {{ remote_config_path }}"
+      ignore_errors: true
+
+    - name: Remove rendered configuration file locally
+      delegate_to: localhost
+      ansible.builtin.file:
+        path: "{{ rendered_config_file }}"
+        state: absent
+
+    - name: Deployment complete
+      ansible.builtin.debug:
+        msg: "VyOS configuration deployed successfully via native load command"

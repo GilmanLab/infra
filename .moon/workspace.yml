@@ -1,0 +1,10 @@
+projects:
+  sources:
+    root: '.'
+    network-vyos: 'network/vyos'
+
+defaultProject: 'network-vyos'
+
+vcs:
+  defaultBranch: 'master'
+  provider: 'github'

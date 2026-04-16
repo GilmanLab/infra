@@ -1,0 +1,43 @@
+layer: 'application'
+tags:
+  - 'network'
+  - 'vyos'
+  - 'ansible'
+
+project:
+  title: 'VyOS gateway automation'
+  description: 'Static validation for the GilmanLab VyOS gateway automation and configuration.'
+  owner: 'GilmanLab'
+  maintainers:
+    - 'josh'
+
+tasks:
+  check-init:
+    command: 'bash -n ansible/init.sh'
+    toolchains: 'system'
+    inputs:
+      - 'ansible/init.sh'
+    options:
+      cache: false
+      runInCI: true
+
+  check-playbook:
+    command: 'ansible-playbook ansible/playbooks/deploy.yml --syntax-check'
+    toolchains: 'system'
+    inputs:
+      - 'ansible.cfg'
+      - 'ansible/**/*.yml'
+      - 'configs/gateway.conf'
+    options:
+      cache: false
+      runInCI: true
+
+  check:
+    deps:
+      - 'check-init'
+      - 'check-playbook'
+    command: 'true'
+    toolchains: 'system'
+    inputs: []
+    options:
+      cache: false

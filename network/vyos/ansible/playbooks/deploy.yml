@@ -210,6 +210,22 @@
                 sudo install -m 0750 {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_pdns_script_path }}
           no_log: true
 
+        - name: Pre-pull PowerDNS image on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman pull {{ pdns_image }}"
+          register: pdns_image_pull
+          changed_when: "'Downloaded' in pdns_image_pull.stdout or 'Copying blob' in pdns_image_pull.stdout or 'Writing manifest' in pdns_image_pull.stdout or 'Storing signatures' in pdns_image_pull.stdout"
+
         - name: Load, commit, and save configuration
           vyos.vyos.vyos_command:
             commands:

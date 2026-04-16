@@ -1,0 +1,45 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+aws_vault_profile := "jmgilman-prod"
+state_bucket := "gilmanlab-tfstate"
+state_region := "us-west-2"
+
+default:
+    @just --list
+
+# One-time, idempotent bootstrap of the shared Tofu S3 backend bucket.
+bootstrap-backend:
+    aws-vault exec {{aws_vault_profile}} -- \
+        env BUCKET={{state_bucket}} REGION={{state_region}} \
+        bash scripts/bootstrap-backend.sh
+
+# Initialize the Tofu working directory against the S3 backend.
+init:
+    aws-vault exec {{aws_vault_profile}} -- tofu init
+
+# Offline validation: no backend, no credentials required.
+check:
+    tofu fmt -check -recursive
+    tofu init -backend=false -input=false
+    tofu validate
+
+# Format Tofu files in place.
+fmt:
+    tofu fmt -recursive
+
+# Render and save a plan to `tfplan`.
+plan:
+    aws-vault exec {{aws_vault_profile}} -- tofu plan -out=tfplan
+
+# Apply the saved plan produced by `just plan`.
+apply:
+    aws-vault exec {{aws_vault_profile}} -- tofu apply tfplan
+
+# Show outputs from the last applied state.
+output:
+    aws-vault exec {{aws_vault_profile}} -- tofu output
+
+# Schedule the root CA key for deletion. Irreversible after the window elapses.
+[confirm("Destroy the root CA KMS key? AWS schedules it for deletion using the configured window.")]
+destroy:
+    aws-vault exec {{aws_vault_profile}} -- tofu destroy

@@ -1,0 +1,212 @@
+---
+pdns_image: docker.io/powerdns/pdns-auth-50:5.0.3
+pdns_service_ip: 10.10.10.53
+pdns_api_url: http://127.0.0.1:8081/api/v1
+pdns_zone_nameservers:
+  - ns1.lab.gilman.io.
+
+pdns_desired_state:
+  server_id: localhost
+  zones:
+    - name: lab.gilman.io.
+      kind: Native
+      nameservers:
+        - ns1.lab.gilman.io.
+      prune_unmanaged_rrsets: true
+      metadata: {}
+      rrsets:
+        - name: lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+        - name: dhcp.lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+        - name: mgmt.lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+        - name: platform.k8s.lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+        - name: ns1.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.53
+              disabled: false
+    - name: mgmt.lab.gilman.io.
+      kind: Native
+      nameservers:
+        - ns1.lab.gilman.io.
+      prune_unmanaged_rrsets: true
+      metadata: {}
+      rrsets:
+        - name: mgmt.lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+        - name: gateway.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.1
+              disabled: false
+        - name: k8s.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.10
+              disabled: false
+        - name: ms02-node1.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.11
+              disabled: false
+        - name: ms02-node2.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.12
+              disabled: false
+        - name: ms02-node3.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.13
+              disabled: false
+        - name: platform-cp-1.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.10
+              disabled: false
+        - name: platform.mgmt.lab.gilman.io.
+          type: A
+          ttl: 300
+          records:
+            - content: 10.10.10.10
+              disabled: false
+    - name: dhcp.lab.gilman.io.
+      kind: Native
+      nameservers:
+        - ns1.lab.gilman.io.
+      prune_unmanaged_rrsets: false
+      metadata:
+        ALLOW-DNSUPDATE-FROM:
+          - 0.0.0.0/0
+          - ::/0
+        SOA-EDIT-DNSUPDATE:
+          - INCREASE
+        TSIG-ALLOW-DNSUPDATE:
+          - vyos-dhcp
+      rrsets:
+        - name: dhcp.lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+    - name: platform.k8s.lab.gilman.io.
+      kind: Native
+      nameservers:
+        - ns1.lab.gilman.io.
+      prune_unmanaged_rrsets: false
+      metadata:
+        ALLOW-DNSUPDATE-FROM:
+          - 0.0.0.0/0
+          - ::/0
+        SOA-EDIT-DNSUPDATE:
+          - INCREASE
+        TSIG-ALLOW-DNSUPDATE:
+          - externaldns-platform
+      rrsets:
+        - name: platform.k8s.lab.gilman.io.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+    - name: 10.10.10.in-addr.arpa.
+      kind: Native
+      nameservers:
+        - ns1.lab.gilman.io.
+      prune_unmanaged_rrsets: false
+      metadata:
+        ALLOW-DNSUPDATE-FROM:
+          - 0.0.0.0/0
+          - ::/0
+        SOA-EDIT-DNSUPDATE:
+          - INCREASE
+        TSIG-ALLOW-DNSUPDATE:
+          - vyos-dhcp
+      rrsets:
+        - name: 10.10.10.in-addr.arpa.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false
+        - name: 1.10.10.in-addr.arpa.
+          type: PTR
+          ttl: 300
+          records:
+            - content: gateway.mgmt.lab.gilman.io.
+              disabled: false
+        - name: 10.10.10.in-addr.arpa.
+          type: PTR
+          ttl: 300
+          records:
+            - content: platform.mgmt.lab.gilman.io.
+              disabled: false
+        - name: 11.10.10.in-addr.arpa.
+          type: PTR
+          ttl: 300
+          records:
+            - content: ms02-node1.mgmt.lab.gilman.io.
+              disabled: false
+        - name: 12.10.10.in-addr.arpa.
+          type: PTR
+          ttl: 300
+          records:
+            - content: ms02-node2.mgmt.lab.gilman.io.
+              disabled: false
+        - name: 13.10.10.in-addr.arpa.
+          type: PTR
+          ttl: 300
+          records:
+            - content: ms02-node3.mgmt.lab.gilman.io.
+              disabled: false
+    - name: 70.10.10.in-addr.arpa.
+      kind: Native
+      nameservers:
+        - ns1.lab.gilman.io.
+      prune_unmanaged_rrsets: false
+      metadata:
+        ALLOW-DNSUPDATE-FROM:
+          - 0.0.0.0/0
+          - ::/0
+        SOA-EDIT-DNSUPDATE:
+          - INCREASE
+        TSIG-ALLOW-DNSUPDATE:
+          - vyos-dhcp
+      rrsets:
+        - name: 70.10.10.in-addr.arpa.
+          type: NS
+          ttl: 300
+          records:
+            - content: ns1.lab.gilman.io.
+              disabled: false

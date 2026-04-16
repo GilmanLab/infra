@@ -1,0 +1,10 @@
+---
+stepca_image: docker.io/smallstep/step-ca:0.28.1
+stepca_service_ip: 10.10.10.9
+stepca_port: 9000
+stepca_health_url: "https://10.10.10.9:9000/health"
+stepca_container_uid: 1000
+stepca_container_gid: 1000
+stepca_name: glab-pki-bootstrap
+stepca_provisioner_name: bootstrap
+stepca_dns_names: "ca.mgmt.lab.gilman.io,localhost,10.10.10.9"

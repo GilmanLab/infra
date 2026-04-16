@@ -1,0 +1,7 @@
+cluster:
+  allowSchedulingOnControlPlanes: true
+  apiServer:
+    certSANs:
+      - k8s.mgmt.lab.gilman.io
+      - platform.mgmt.lab.gilman.io
+      - 10.10.10.10

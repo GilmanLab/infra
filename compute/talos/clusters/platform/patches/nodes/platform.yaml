@@ -1,0 +1,27 @@
+machine:
+  certSANs:
+    - platform.mgmt.lab.gilman.io
+---
+apiVersion: v1alpha1
+kind: HostnameConfig
+hostname: platform.mgmt.lab.gilman.io
+auto: off
+---
+apiVersion: v1alpha1
+kind: LinkAliasConfig
+name: net0
+selector:
+  match: 'glob("38:05:25:34:25:d0", mac(link.permanent_addr))'
+---
+apiVersion: v1alpha1
+kind: LinkConfig
+name: net0
+addresses:
+  - address: 10.10.10.10/24
+routes:
+  - gateway: 10.10.10.1
+---
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: 10.10.10.1

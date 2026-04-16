@@ -1,0 +1,17 @@
+default:
+    @just --list
+
+secrets-generate:
+    uv run clusterctl.py generate-secrets
+
+render:
+    uv run clusterctl.py render
+
+validate:
+    uv run clusterctl.py validate
+
+iso-generate:
+    uv run clusterctl.py generate-iso
+
+clean:
+    rm -rf .state

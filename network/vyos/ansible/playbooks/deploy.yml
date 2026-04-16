@@ -204,8 +204,9 @@
               - UserKnownHostsFile=/dev/null
               - "{{ ansible_user }}@{{ ansible_host }}"
               - >-
-                sudo install -d -m 0750 /config/containers/pdns-auth {{ remote_pdns_data_dir }} /config/scripts &&
-                sudo install -m 0600 {{ remote_stage_dir }}/pdns.conf {{ remote_pdns_conf_path }} &&
+                sudo install -d -m 0750 /config/containers/pdns-auth /config/scripts &&
+                sudo install -d -o 953 -g 953 -m 0750 {{ remote_pdns_data_dir }} &&
+                sudo install -o 953 -g 953 -m 0640 {{ remote_stage_dir }}/pdns.conf {{ remote_pdns_conf_path }} &&
                 sudo install -m 0600 {{ remote_stage_dir }}/desired-state.json {{ remote_pdns_state_path }} &&
                 sudo install -m 0750 {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_pdns_script_path }}
           no_log: true

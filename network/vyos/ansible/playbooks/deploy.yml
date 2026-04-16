@@ -17,23 +17,27 @@
 #   - Local rendered secret material is staged in a temporary directory and removed
 #     at the end of the run.
 ---
-- name: Deploy VyOS configuration and PowerDNS
+- name: Deploy VyOS configuration, PowerDNS, and step-ca
   hosts: vyos_gateway
   gather_facts: false
   vars_files:
     - ../vars/powerdns.yml
+    - ../vars/stepca.yml
 
   vars:
     secrets_dir: "{{ lookup('env', 'GLAB_SECRETS_DIR') | default(playbook_dir ~ '/../../../../../secrets', true) }}"
     config_file: "{{ playbook_dir }}/../../configs/gateway.conf"
     ssh_sops_file: "{{ secrets_dir }}/network/vyos/ssh.sops.yaml"
     pdns_sops_file: "{{ secrets_dir }}/network/vyos/dns/powerdns.sops.yaml"
+    stepca_sops_file: "{{ secrets_dir }}/network/vyos/pki/stepca.sops.yaml"
     backup_dir: "{{ playbook_dir }}/../../backups"
     remote_config_path: /tmp/gateway.conf
     remote_pdns_conf_path: /config/containers/pdns-auth/pdns.conf
     remote_pdns_state_path: /config/containers/pdns-auth/desired-state.json
     remote_pdns_data_dir: /config/containers/pdns-auth/data
     remote_pdns_script_path: /config/scripts/pdns-reconcile.py
+    remote_stepca_data_dir: /config/containers/stepca/data
+    remote_stepca_password_path: /config/containers/stepca/init-password
     remote_stage_dir: /tmp
     tsig_secret_placeholder: "__VYOS_DHCP_TSIG_SECRET__"
     pdns_reconcile_script_source: "{{ playbook_dir }}/../files/pdns-reconcile.py"
@@ -71,6 +75,7 @@
         rendered_config_file: "{{ render_dir.path }}/gateway.conf"
         rendered_pdns_conf_file: "{{ render_dir.path }}/pdns.conf"
         rendered_pdns_state_file: "{{ render_dir.path }}/desired-state.json"
+        rendered_stepca_password_file: "{{ render_dir.path }}/stepca-init-password"
 
     - name: Decrypt SSH credentials from SOPS
       delegate_to: localhost
@@ -106,6 +111,20 @@
       delegate_to: localhost
       ansible.builtin.set_fact:
         pdns_credentials: "{{ pdns_sops_output.stdout | from_yaml }}"
+      no_log: true
+
+    - name: Decrypt step-ca credentials from SOPS
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: sops -d "{{ stepca_sops_file }}"
+      register: stepca_sops_output
+      changed_when: false
+      no_log: true
+
+    - name: Parse step-ca credentials
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        stepca_credentials: "{{ stepca_sops_output.stdout | from_yaml }}"
       no_log: true
 
     - name: Build rendered PowerDNS desired state
@@ -171,7 +190,15 @@
         mode: "0600"
       no_log: true
 
-    - name: Stage PowerDNS files on router
+    - name: Write step-ca init password to render dir
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: "{{ stepca_credentials.init_password }}"
+        dest: "{{ rendered_stepca_password_file }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Stage runtime files on router
       block:
         - name: Copy configuration and runtime assets to router staging
           delegate_to: localhost
@@ -187,6 +214,7 @@
               - "{{ rendered_config_file }}"
               - "{{ rendered_pdns_conf_file }}"
               - "{{ rendered_pdns_state_file }}"
+              - "{{ rendered_stepca_password_file }}"
               - "{{ pdns_reconcile_script_source }}"
               - "{{ ansible_user }}@{{ ansible_host }}:{{ remote_stage_dir }}/"
           no_log: true
@@ -211,6 +239,24 @@
                 sudo install -m 0750 {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_pdns_script_path }}
           no_log: true
 
+        - name: Install step-ca runtime assets on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                sudo install -d -m 0750 /config/containers/stepca &&
+                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_data_dir }} &&
+                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/stepca-init-password {{ remote_stepca_password_path }}
+          no_log: true
+
         - name: Pre-pull PowerDNS image on router
           delegate_to: localhost
           ansible.builtin.command:
@@ -226,6 +272,22 @@
               - "sudo podman pull {{ pdns_image }}"
           register: pdns_image_pull
           changed_when: "'Downloaded' in pdns_image_pull.stdout or 'Copying blob' in pdns_image_pull.stdout or 'Writing manifest' in pdns_image_pull.stdout or 'Storing signatures' in pdns_image_pull.stdout"
+
+        - name: Pre-pull step-ca image on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman pull {{ stepca_image }}"
+          register: stepca_image_pull
+          changed_when: "'Downloaded' in stepca_image_pull.stdout or 'Copying blob' in stepca_image_pull.stdout or 'Writing manifest' in stepca_image_pull.stdout or 'Storing signatures' in stepca_image_pull.stdout"
 
         - name: Load, commit, and save configuration
           vyos.vyos.vyos_command:
@@ -282,9 +344,27 @@
                 python3 {{ remote_pdns_script_path }} {{ remote_pdns_state_path }}
           no_log: true
 
+        - name: Wait for step-ca health endpoint
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "curl -fsS -k {{ stepca_health_url }}"
+          register: stepca_health
+          retries: 30
+          delay: 5
+          until: stepca_health.rc == 0
+
         - name: Deployment complete
           ansible.builtin.debug:
-            msg: "VyOS configuration and PowerDNS deployed successfully"
+            msg: "VyOS configuration, PowerDNS, and step-ca deployed successfully"
       always:
         - name: Remove staged files from router
           delegate_to: localhost
@@ -298,7 +378,7 @@
               - -o
               - UserKnownHostsFile=/dev/null
               - "{{ ansible_user }}@{{ ansible_host }}"
-              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py"
+              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/stepca-init-password"
           ignore_errors: true
           no_log: true
 

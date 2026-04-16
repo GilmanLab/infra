@@ -1,0 +1,14 @@
+name: platform
+endpoint: https://k8s.mgmt.lab.gilman.io:6443
+talosVersion: v1.12.6
+kubernetesVersion: 1.35.2
+dnsDomain: cluster.local
+secretsFile: compute/talos/platform/cluster-secrets.sops.yaml
+outputDir: .state/rendered
+bootAssets:
+  arch: amd64
+  outputDir: .state/boot-assets
+  schematicFile: schematic.yaml
+nodes:
+  controlPlane:
+    - name: platform

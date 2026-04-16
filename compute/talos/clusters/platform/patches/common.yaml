@@ -1,0 +1,11 @@
+machine:
+  install:
+    disk: /dev/nvme0n1
+  kubelet:
+    defaultRuntimeSeccompProfileEnabled: true
+  features:
+    kubePrism:
+      enabled: true
+    hostDNS:
+      enabled: true
+      forwardKubeDNSToHost: true

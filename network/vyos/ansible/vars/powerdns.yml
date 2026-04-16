@@ -160,31 +160,31 @@ pdns_desired_state:
           records:
             - content: ns1.lab.gilman.io.
               disabled: false
-        - name: 1.10.10.in-addr.arpa.
+        - name: 1.10.10.10.in-addr.arpa.
           type: PTR
           ttl: 300
           records:
             - content: gateway.mgmt.lab.gilman.io.
               disabled: false
-        - name: 10.10.10.in-addr.arpa.
+        - name: 10.10.10.10.in-addr.arpa.
           type: PTR
           ttl: 300
           records:
             - content: platform.mgmt.lab.gilman.io.
               disabled: false
-        - name: 11.10.10.in-addr.arpa.
+        - name: 11.10.10.10.in-addr.arpa.
           type: PTR
           ttl: 300
           records:
             - content: ms02-node1.mgmt.lab.gilman.io.
               disabled: false
-        - name: 12.10.10.in-addr.arpa.
+        - name: 12.10.10.10.in-addr.arpa.
           type: PTR
           ttl: 300
           records:
             - content: ms02-node2.mgmt.lab.gilman.io.
               disabled: false
-        - name: 13.10.10.in-addr.arpa.
+        - name: 13.10.10.10.in-addr.arpa.
           type: PTR
           ttl: 300
           records:

@@ -37,7 +37,11 @@
     remote_pdns_data_dir: /config/containers/pdns-auth/data
     remote_pdns_script_path: /config/scripts/pdns-reconcile.py
     remote_stepca_data_dir: /config/containers/stepca/data
-    remote_stepca_password_path: /config/containers/stepca/init-password
+    remote_stepca_certs_dir: /config/containers/stepca/data/certs
+    remote_stepca_secrets_dir: /config/containers/stepca/data/secrets
+    remote_stepca_config_dir: /config/containers/stepca/data/config
+    remote_stepca_db_dir: /config/containers/stepca/data/db
+    remote_stepca_legacy_password_path: /config/containers/stepca/init-password
     remote_stage_dir: /tmp
     tsig_secret_placeholder: "__VYOS_DHCP_TSIG_SECRET__"
     pdns_reconcile_script_source: "{{ playbook_dir }}/../files/pdns-reconcile.py"
@@ -75,7 +79,9 @@
         rendered_config_file: "{{ render_dir.path }}/gateway.conf"
         rendered_pdns_conf_file: "{{ render_dir.path }}/pdns.conf"
         rendered_pdns_state_file: "{{ render_dir.path }}/desired-state.json"
-        rendered_stepca_password_file: "{{ render_dir.path }}/stepca-init-password"
+        rendered_stepca_ca_json_file: "{{ render_dir.path }}/ca.json"
+        rendered_stepca_intermediate_key_file: "{{ render_dir.path }}/intermediate_ca_key"
+        rendered_stepca_intermediate_pw_file: "{{ render_dir.path }}/intermediate_ca_pw"
 
     - name: Decrypt SSH credentials from SOPS
       delegate_to: localhost
@@ -125,6 +131,20 @@
       delegate_to: localhost
       ansible.builtin.set_fact:
         stepca_credentials: "{{ stepca_sops_output.stdout | from_yaml }}"
+      no_log: true
+
+    - name: Assert required step-ca SOPS keys are present
+      delegate_to: localhost
+      ansible.builtin.assert:
+        that:
+          - stepca_credentials.intermediate_key_pem is defined
+          - stepca_credentials.intermediate_key_password is defined
+          - stepca_credentials.jwk_public_jwk is defined
+          - stepca_credentials.jwk_encrypted_key is defined
+        fail_msg: >-
+          stepca.sops.yaml is missing one or more required router-shipped
+          keys (intermediate_key_pem, intermediate_key_password,
+          jwk_public_jwk, jwk_encrypted_key). Merge the secrets PR first.
       no_log: true
 
     - name: Build rendered PowerDNS desired state
@@ -190,11 +210,27 @@
         mode: "0600"
       no_log: true
 
-    - name: Write step-ca init password to render dir
+    - name: Render step-ca ca.json
+      delegate_to: localhost
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/ca.json.j2"
+        dest: "{{ rendered_stepca_ca_json_file }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Write step-ca intermediate key to render dir
       delegate_to: localhost
       ansible.builtin.copy:
-        content: "{{ stepca_credentials.init_password }}"
-        dest: "{{ rendered_stepca_password_file }}"
+        content: "{{ stepca_credentials.intermediate_key_pem }}"
+        dest: "{{ rendered_stepca_intermediate_key_file }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Write step-ca intermediate key password to render dir
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: "{{ stepca_credentials.intermediate_key_password }}"
+        dest: "{{ rendered_stepca_intermediate_pw_file }}"
         mode: "0600"
       no_log: true
 
@@ -214,8 +250,12 @@
               - "{{ rendered_config_file }}"
               - "{{ rendered_pdns_conf_file }}"
               - "{{ rendered_pdns_state_file }}"
-              - "{{ rendered_stepca_password_file }}"
+              - "{{ rendered_stepca_ca_json_file }}"
+              - "{{ rendered_stepca_intermediate_key_file }}"
+              - "{{ rendered_stepca_intermediate_pw_file }}"
               - "{{ pdns_reconcile_script_source }}"
+              - "{{ stepca_root_ca_cert_source }}"
+              - "{{ stepca_intermediate_ca_cert_source }}"
               - "{{ ansible_user }}@{{ ansible_host }}:{{ remote_stage_dir }}/"
           no_log: true
 
@@ -254,7 +294,16 @@
               - >-
                 sudo install -d -m 0750 /config/containers/stepca &&
                 sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_data_dir }} &&
-                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/stepca-init-password {{ remote_stepca_password_path }}
+                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_certs_dir }} &&
+                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_secrets_dir }} &&
+                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_config_dir }} &&
+                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_db_dir }} &&
+                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0444 {{ remote_stage_dir }}/root_ca.crt {{ remote_stepca_certs_dir }}/root_ca.crt &&
+                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0444 {{ remote_stage_dir }}/intermediate_ca.crt {{ remote_stepca_certs_dir }}/intermediate_ca.crt &&
+                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/intermediate_ca_key {{ remote_stepca_secrets_dir }}/intermediate_ca_key &&
+                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/intermediate_ca_pw {{ remote_stepca_secrets_dir }}/intermediate_ca_pw &&
+                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/ca.json {{ remote_stepca_config_dir }}/ca.json &&
+                sudo rm -f {{ remote_stepca_legacy_password_path }}
           no_log: true
 
         - name: Pre-pull PowerDNS image on router
@@ -362,6 +411,31 @@
           delay: 5
           until: stepca_health.rc == 0
 
+        - name: Fetch step-ca roots.pem for chain verification
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "curl -fsS -k https://{{ stepca_service_ip }}:{{ stepca_port }}/roots.pem | openssl x509 -noout -subject -issuer"
+          register: stepca_roots_pem
+          changed_when: false
+
+        - name: Verify step-ca is serving the KMS-rooted chain
+          ansible.builtin.assert:
+            that:
+              - "'glab Root CA' in stepca_roots_pem.stdout"
+            fail_msg: >-
+              step-ca is serving an unexpected root certificate. Expected
+              subject 'glab Root CA' but got: {{ stepca_roots_pem.stdout }}.
+              Deployment may be pointing at stale bootstrap material.
+
         - name: Deployment complete
           ansible.builtin.debug:
             msg: "VyOS configuration, PowerDNS, and step-ca deployed successfully"
@@ -378,7 +452,7 @@
               - -o
               - UserKnownHostsFile=/dev/null
               - "{{ ansible_user }}@{{ ansible_host }}"
-              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/stepca-init-password"
+              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/ca.json {{ remote_stage_dir }}/intermediate_ca_key {{ remote_stage_dir }}/intermediate_ca_pw {{ remote_stage_dir }}/root_ca.crt {{ remote_stage_dir }}/intermediate_ca.crt"
           ignore_errors: true
           no_log: true
 

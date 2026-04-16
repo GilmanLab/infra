@@ -1,0 +1,41 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+aws_vault_profile := "jmgilman-prod"
+secrets_file := "network/tailscale/terraform.sops.yaml"
+
+default:
+    @just --list
+
+# Offline validation: no backend or credentials required.
+check:
+    tofu fmt -check -recursive
+    tofu init -backend=false -input=false
+    tofu validate
+
+# Format Tofu files in place.
+fmt:
+    tofu fmt -recursive
+
+# Initialize the Tofu working directory against the S3 backend.
+init:
+    GLAB_SECRETS_DIR="${GLAB_SECRETS_DIR:-../../../secrets}"; \
+    export TF_VAR_tailscale_tailnet="$(sops -d --extract '["tailnet"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    export TF_VAR_tailscale_oauth_client_id="$(sops -d --extract '["oauth_client_id"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    export TF_VAR_tailscale_oauth_client_secret="$(sops -d --extract '["oauth_client_secret"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    aws-vault exec {{aws_vault_profile}} -- tofu init
+
+# Render and save a plan to `tfplan`.
+plan:
+    GLAB_SECRETS_DIR="${GLAB_SECRETS_DIR:-../../../secrets}"; \
+    export TF_VAR_tailscale_tailnet="$(sops -d --extract '["tailnet"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    export TF_VAR_tailscale_oauth_client_id="$(sops -d --extract '["oauth_client_id"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    export TF_VAR_tailscale_oauth_client_secret="$(sops -d --extract '["oauth_client_secret"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    aws-vault exec {{aws_vault_profile}} -- tofu plan -out=tfplan
+
+# Apply the saved plan produced by `just plan`.
+apply:
+    GLAB_SECRETS_DIR="${GLAB_SECRETS_DIR:-../../../secrets}"; \
+    export TF_VAR_tailscale_tailnet="$(sops -d --extract '["tailnet"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    export TF_VAR_tailscale_oauth_client_id="$(sops -d --extract '["oauth_client_id"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    export TF_VAR_tailscale_oauth_client_secret="$(sops -d --extract '["oauth_client_secret"]' "$GLAB_SECRETS_DIR/{{secrets_file}}")"; \
+    aws-vault exec {{aws_vault_profile}} -- tofu apply tfplan

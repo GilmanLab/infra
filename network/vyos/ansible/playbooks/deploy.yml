@@ -1,6 +1,7 @@
 # VyOS Configuration Deployment Playbook
-# Applies gateway.conf to the router, stages PowerDNS runtime assets, and
-# reconciles authoritative DNS state via the local PowerDNS API.
+# Applies gateway.conf to the router, stages runtime assets, reconciles
+# authoritative DNS state via the local PowerDNS API, and verifies edge
+# containers.
 #
 # Usage:
 #   ansible-playbook deploy.yml -i ../inventory/hosts.yml
@@ -17,12 +18,13 @@
 #   - Local rendered secret material is staged in a temporary directory and removed
 #     at the end of the run.
 ---
-- name: Deploy VyOS configuration, PowerDNS, and step-ca
+- name: Deploy VyOS configuration and edge services
   hosts: vyos_gateway
   gather_facts: false
   vars_files:
     - ../vars/powerdns.yml
     - ../vars/stepca.yml
+    - ../vars/tailscale.yml
 
   vars:
     secrets_dir: "{{ lookup('env', 'GLAB_SECRETS_DIR') | default(playbook_dir ~ '/../../../../../secrets', true) }}"
@@ -30,6 +32,7 @@
     ssh_sops_file: "{{ secrets_dir }}/network/vyos/ssh.sops.yaml"
     pdns_sops_file: "{{ secrets_dir }}/network/vyos/dns/powerdns.sops.yaml"
     stepca_sops_file: "{{ secrets_dir }}/network/vyos/pki/stepca.sops.yaml"
+    tailscale_sops_file: "{{ secrets_dir }}/network/vyos/tailscale.sops.yaml"
     backup_dir: "{{ playbook_dir }}/../../backups"
     remote_config_path: /tmp/gateway.conf
     remote_pdns_conf_path: /config/containers/pdns-auth/pdns.conf
@@ -44,6 +47,7 @@
     remote_stepca_legacy_password_path: /config/containers/stepca/init-password
     remote_stage_dir: /tmp
     tsig_secret_placeholder: "__VYOS_DHCP_TSIG_SECRET__"
+    tailscale_authkey_placeholder: "__TAILSCALE_AUTHKEY__"
     pdns_reconcile_script_source: "{{ playbook_dir }}/../files/pdns-reconcile.py"
 
   tasks:
@@ -147,6 +151,32 @@
           jwk_public_jwk, jwk_encrypted_key). Merge the secrets PR first.
       no_log: true
 
+    - name: Decrypt Tailscale credentials from SOPS
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: sops -d "{{ tailscale_sops_file }}"
+      register: tailscale_sops_output
+      changed_when: false
+      no_log: true
+
+    - name: Parse Tailscale credentials
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        tailscale_credentials: "{{ tailscale_sops_output.stdout | from_yaml }}"
+      no_log: true
+
+    - name: Assert required Tailscale SOPS keys are present
+      delegate_to: localhost
+      ansible.builtin.assert:
+        that:
+          - tailscale_credentials.oauth_client_secret is defined
+          - tailscale_credentials.oauth_client_secret | length > 0
+        fail_msg: >-
+          tailscale.sops.yaml is missing oauth_client_secret. Create a
+          Tailscale OAuth client scoped to {{ tailscale_tag }} with auth_keys
+          write permission and store its secret under network/vyos.
+      no_log: true
+
     - name: Build rendered PowerDNS desired state
       ansible.builtin.set_fact:
         pdns_desired_state_rendered: >-
@@ -189,6 +219,7 @@
             (config_content.content | b64decode)
             | replace(auth_placeholder, auth_with_credentials)
             | replace(tsig_secret_placeholder, pdns_credentials.tsig_keys.vyos_dhcp.secret)
+            | replace(tailscale_authkey_placeholder, tailscale_credentials.oauth_client_secret ~ '?ephemeral=false&preauthorized=true')
           }}
         dest: "{{ rendered_config_file }}"
         mode: "0600"
@@ -257,6 +288,23 @@
               - "{{ stepca_root_ca_cert_source }}"
               - "{{ stepca_intermediate_ca_cert_source }}"
               - "{{ ansible_user }}@{{ ansible_host }}:{{ remote_stage_dir }}/"
+          no_log: true
+
+        - name: Install Tailscale runtime assets on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                sudo install -d -m 0750 /config/containers/tailscale &&
+                sudo install -d -m 0700 {{ tailscale_state_dir }}
           no_log: true
 
         - name: Install PowerDNS runtime assets on router
@@ -337,6 +385,22 @@
               - "sudo podman pull {{ stepca_image }}"
           register: stepca_image_pull
           changed_when: "'Downloaded' in stepca_image_pull.stdout or 'Copying blob' in stepca_image_pull.stdout or 'Writing manifest' in stepca_image_pull.stdout or 'Storing signatures' in stepca_image_pull.stdout"
+
+        - name: Pre-pull Tailscale image on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman pull {{ tailscale_image }}"
+          register: tailscale_image_pull
+          changed_when: "'Downloaded' in tailscale_image_pull.stdout or 'Copying blob' in tailscale_image_pull.stdout or 'Writing manifest' in tailscale_image_pull.stdout or 'Storing signatures' in tailscale_image_pull.stdout"
 
         - name: Load, commit, and save configuration
           vyos.vyos.vyos_command:
@@ -436,9 +500,35 @@
               subject 'glab Root CA' but got: {{ stepca_roots_pem.stdout }}.
               Deployment may be pointing at stale bootstrap material.
 
+        - name: Wait for Tailscale subnet router to become ready
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman exec tailscale tailscale status --json"
+          register: tailscale_status
+          retries: 30
+          delay: 5
+          until: tailscale_status.rc == 0 and tailscale_hostname in tailscale_status.stdout
+          no_log: true
+
+        - name: Verify Tailscale advertised routes
+          ansible.builtin.assert:
+            that:
+              - item in tailscale_status.stdout
+            fail_msg: "Tailscale status did not include advertised route {{ item }}"
+          loop: "{{ tailscale_routes }}"
+
         - name: Deployment complete
           ansible.builtin.debug:
-            msg: "VyOS configuration, PowerDNS, and step-ca deployed successfully"
+            msg: "VyOS configuration and edge services deployed successfully"
       always:
         - name: Remove staged files from router
           delegate_to: localhost

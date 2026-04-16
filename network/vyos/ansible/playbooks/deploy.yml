@@ -1,44 +1,45 @@
 # VyOS Configuration Deployment Playbook
-# Applies gateway.conf to VyOS router using native VyOS `load` command
+# Applies gateway.conf to the router, stages PowerDNS runtime assets, and
+# reconciles authoritative DNS state via the local PowerDNS API.
 #
 # Usage:
 #   ansible-playbook deploy.yml -i ../inventory/hosts.yml
 #
 # Environment Variables:
-#   VYOS_HOST     - VyOS hostname or IP (default: 10.0.0.2)
-#   VYOS_SSH_KEY  - Path to SSH private key for connection (default: ~/.ssh/vyos-gateway)
-#   GLAB_SECRETS_DIR - Path to the shared secrets repo (default: sibling ../secrets)
+#   VYOS_HOST         - VyOS hostname or IP (default: 10.0.0.2)
+#   VYOS_SSH_KEY      - Path to SSH private key for connection (default: ~/.ssh/vyos-gateway)
+#   GLAB_SECRETS_DIR  - Path to the shared secrets repo (default: sibling ../secrets)
 #
-# This playbook:
-#   1. Backs up current router configuration
-#   2. Decrypts SSH credentials from the shared SOPS secrets repo
-#   3. Injects credentials into gateway.conf
-#   4. Copies config to router and applies via `load` command
-#   5. Verifies connectivity before saving
-#
-# Note: Uses VyOS native `load` command instead of vyos_config module because
-# the Ansible module doesn't properly parse bracket format with comments.
-#
-# Safety: Config is committed but not saved until connectivity is verified.
-# If connectivity fails, reboot the router to restore the previous saved config.
+# Safety:
+#   - Uses VyOS native `load` command instead of vyos_config because the Ansible
+#     module doesn't properly parse bracket format with comments.
+#   - Candidate config is committed and saved only after runtime assets are in place.
+#   - Local rendered secret material is staged in a temporary directory and removed
+#     at the end of the run.
 ---
-- name: Deploy VyOS Configuration
+- name: Deploy VyOS configuration and PowerDNS
   hosts: vyos_gateway
   gather_facts: false
+  vars_files:
+    - ../vars/powerdns.yml
 
   vars:
     secrets_dir: "{{ lookup('env', 'GLAB_SECRETS_DIR') | default(playbook_dir ~ '/../../../../../secrets', true) }}"
     config_file: "{{ playbook_dir }}/../../configs/gateway.conf"
-    sops_file: "{{ secrets_dir }}/network/vyos/ssh.sops.yaml"
+    ssh_sops_file: "{{ secrets_dir }}/network/vyos/ssh.sops.yaml"
+    pdns_sops_file: "{{ secrets_dir }}/network/vyos/dns/powerdns.sops.yaml"
     backup_dir: "{{ playbook_dir }}/../../backups"
-    rendered_config_file: "{{ playbook_dir }}/../../.rendered-gateway.conf"
     remote_config_path: /tmp/gateway.conf
+    remote_pdns_conf_path: /config/containers/pdns-auth/pdns.conf
+    remote_pdns_state_path: /config/containers/pdns-auth/desired-state.json
+    remote_pdns_data_dir: /config/containers/pdns-auth/data
+    remote_pdns_script_path: /config/scripts/pdns-reconcile.py
+    remote_stage_dir: /tmp
+    tsig_secret_placeholder: "__VYOS_DHCP_TSIG_SECRET__"
+    pdns_reconcile_script_source: "{{ playbook_dir }}/../files/pdns-reconcile.py"
 
   tasks:
-    # =========================================================================
-    # Backup Current Configuration
-    # =========================================================================
-    - name: Ensure backup directory exists
+    - name: Ensure local backup directory exists
       delegate_to: localhost
       ansible.builtin.file:
         path: "{{ backup_dir }}"
@@ -58,21 +59,31 @@
         dest: "{{ backup_dir }}/gateway-{{ lookup('pipe', 'date +%Y%m%dT%H%M%S') }}.conf"
         mode: "0644"
 
-    # =========================================================================
-    # Decrypt SOPS Credentials
-    # =========================================================================
+    - name: Create local render directory
+      delegate_to: localhost
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: vyos-dns-deploy-
+      register: render_dir
+
+    - name: Set local render paths
+      ansible.builtin.set_fact:
+        rendered_config_file: "{{ render_dir.path }}/gateway.conf"
+        rendered_pdns_conf_file: "{{ render_dir.path }}/pdns.conf"
+        rendered_pdns_state_file: "{{ render_dir.path }}/desired-state.json"
+
     - name: Decrypt SSH credentials from SOPS
       delegate_to: localhost
       ansible.builtin.command:
-        cmd: sops -d "{{ sops_file }}"
-      register: sops_output
+        cmd: sops -d "{{ ssh_sops_file }}"
+      register: ssh_sops_output
       changed_when: false
       no_log: true
 
     - name: Parse SSH credentials
       delegate_to: localhost
       ansible.builtin.set_fact:
-        ssh_credentials: "{{ sops_output.stdout | from_yaml }}"
+        ssh_credentials: "{{ ssh_sops_output.stdout | from_yaml }}"
       no_log: true
 
     - name: Extract SSH key components
@@ -83,87 +94,217 @@
         ssh_password: "{{ ssh_credentials.password }}"
       no_log: true
 
-    # =========================================================================
-    # Render Configuration with Credentials
-    # =========================================================================
+    - name: Decrypt PowerDNS credentials from SOPS
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: sops -d "{{ pdns_sops_file }}"
+      register: pdns_sops_output
+      changed_when: false
+      no_log: true
+
+    - name: Parse PowerDNS credentials
+      delegate_to: localhost
+      ansible.builtin.set_fact:
+        pdns_credentials: "{{ pdns_sops_output.stdout | from_yaml }}"
+      no_log: true
+
+    - name: Build rendered PowerDNS desired state
+      ansible.builtin.set_fact:
+        pdns_desired_state_rendered: >-
+          {{
+            pdns_desired_state
+            | combine(
+                {
+                  'tsig_keys': [
+                    {
+                      'name': pdns_credentials.tsig_keys.vyos_dhcp.name,
+                      'algorithm': pdns_credentials.tsig_keys.vyos_dhcp.algorithm,
+                      'key': pdns_credentials.tsig_keys.vyos_dhcp.secret
+                    },
+                    {
+                      'name': pdns_credentials.tsig_keys.externaldns_platform.name,
+                      'algorithm': pdns_credentials.tsig_keys.externaldns_platform.algorithm,
+                      'key': pdns_credentials.tsig_keys.externaldns_platform.secret
+                    }
+                  ]
+                },
+                recursive=True
+              )
+          }}
+      no_log: true
+
     - name: Read gateway configuration
       delegate_to: localhost
       ansible.builtin.slurp:
         src: "{{ config_file }}"
       register: config_content
 
-    - name: Render configuration with injected credentials
+    - name: Render gateway configuration with injected credentials
       delegate_to: localhost
       vars:
-        # NOTE: Indentation must exactly match gateway.conf (8/12/16/20 spaces)
-        # YAML strips leading indent based on first line, so we start at column 0
-        # and include literal spaces for each line
         auth_placeholder: "        user vyos {\n            authentication {\n                /* SSH public keys added by Ansible deploy.yml */\n                /* Password set manually for console access */\n            }\n        }"
         auth_with_credentials: "        user vyos {\n            authentication {\n                plaintext-password \"{{ ssh_password }}\"\n                public-keys vyos-gateway {\n                    key {{ ssh_key_data }}\n                    type {{ ssh_key_type }}\n                }\n            }\n        }"
       ansible.builtin.copy:
-        content: "{{ (config_content.content | b64decode) | replace(auth_placeholder, auth_with_credentials) }}"
+        content: >-
+          {{
+            (config_content.content | b64decode)
+            | replace(auth_placeholder, auth_with_credentials)
+            | replace(tsig_secret_placeholder, pdns_credentials.tsig_keys.vyos_dhcp.secret)
+          }}
         dest: "{{ rendered_config_file }}"
         mode: "0600"
       no_log: true
 
-    # =========================================================================
-    # Copy Configuration to Router
-    # =========================================================================
-    - name: Copy configuration to router
+    - name: Render PowerDNS configuration
       delegate_to: localhost
-      ansible.builtin.shell:
-        cmd: >
-          scp -i {{ ansible_ssh_private_key_file }}
-          -o StrictHostKeyChecking=no
-          -o UserKnownHostsFile=/dev/null
-          "{{ rendered_config_file }}"
-          {{ ansible_user }}@{{ ansible_host }}:{{ remote_config_path }}
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/pdns.conf.j2"
+        dest: "{{ rendered_pdns_conf_file }}"
+        mode: "0600"
       no_log: true
 
-    # =========================================================================
-    # Apply Configuration via VyOS load command
-    # =========================================================================
-    - name: Load, commit, and save configuration
-      vyos.vyos.vyos_command:
-        commands:
-          - configure
-          - "load {{ remote_config_path }}"
-          - commit
-          - save
-          - exit
-      register: load_result
-      vars:
-        ansible_command_timeout: 120
-
-    - name: Display load result
-      ansible.builtin.debug:
-        msg: "Configuration loaded, committed, and saved"
-
-    - name: Verify connectivity after config change
-      ansible.builtin.wait_for_connection:
-        delay: 5
-        timeout: 60
-
-    # =========================================================================
-    # Cleanup
-    # =========================================================================
-    - name: Remove configuration file from router
+    - name: Render PowerDNS desired state
       delegate_to: localhost
-      ansible.builtin.shell:
-        cmd: >
-          ssh -i {{ ansible_ssh_private_key_file }}
-          -o StrictHostKeyChecking=no
-          -o UserKnownHostsFile=/dev/null
-          {{ ansible_user }}@{{ ansible_host }}
-          "rm -f {{ remote_config_path }}"
-      ignore_errors: true
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/pdns-desired-state.json.j2"
+        dest: "{{ rendered_pdns_state_file }}"
+        mode: "0600"
+      no_log: true
 
-    - name: Remove rendered configuration file locally
-      delegate_to: localhost
-      ansible.builtin.file:
-        path: "{{ rendered_config_file }}"
-        state: absent
+    - name: Stage PowerDNS files on router
+      block:
+        - name: Copy configuration and runtime assets to router staging
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - scp
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ rendered_config_file }}"
+              - "{{ rendered_pdns_conf_file }}"
+              - "{{ rendered_pdns_state_file }}"
+              - "{{ pdns_reconcile_script_source }}"
+              - "{{ ansible_user }}@{{ ansible_host }}:{{ remote_stage_dir }}/"
+          no_log: true
 
-    - name: Deployment complete
-      ansible.builtin.debug:
-        msg: "VyOS configuration deployed successfully via native load command"
+        - name: Install PowerDNS runtime assets on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                sudo install -d -m 0750 /config/containers/pdns-auth /config/scripts &&
+                sudo install -d -o 953 -g 953 -m 0750 {{ remote_pdns_data_dir }} &&
+                sudo install -o 953 -g 953 -m 0640 {{ remote_stage_dir }}/pdns.conf {{ remote_pdns_conf_path }} &&
+                sudo install -m 0600 {{ remote_stage_dir }}/desired-state.json {{ remote_pdns_state_path }} &&
+                sudo install -m 0750 {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_pdns_script_path }}
+          no_log: true
+
+        - name: Pre-pull PowerDNS image on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman pull {{ pdns_image }}"
+          register: pdns_image_pull
+          changed_when: "'Downloaded' in pdns_image_pull.stdout or 'Copying blob' in pdns_image_pull.stdout or 'Writing manifest' in pdns_image_pull.stdout or 'Storing signatures' in pdns_image_pull.stdout"
+
+        - name: Load, commit, and save configuration
+          vyos.vyos.vyos_command:
+            commands:
+              - configure
+              - "load {{ remote_config_path }}"
+              - commit
+              - save
+              - exit
+          vars:
+            ansible_command_timeout: 300
+
+        - name: Verify connectivity after config change
+          ansible.builtin.wait_for_connection:
+            delay: 5
+            timeout: 90
+
+        - name: Wait for PowerDNS API to become healthy
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                curl -fsS -H "X-API-Key: {{ pdns_credentials.api_key }}"
+                {{ pdns_api_url }}/servers/localhost
+          register: pdns_api_ready
+          retries: 30
+          delay: 5
+          until: pdns_api_ready.rc == 0
+          no_log: true
+
+        - name: Reconcile PowerDNS desired state
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                sudo env PDNS_API_KEY={{ pdns_credentials.api_key | quote }}
+                PDNS_API_URL={{ pdns_api_url | quote }}
+                python3 {{ remote_pdns_script_path }} {{ remote_pdns_state_path }}
+          no_log: true
+
+        - name: Deployment complete
+          ansible.builtin.debug:
+            msg: "VyOS configuration and PowerDNS deployed successfully"
+      always:
+        - name: Remove staged files from router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py"
+          ignore_errors: true
+          no_log: true
+
+        - name: Remove local render directory
+          delegate_to: localhost
+          ansible.builtin.file:
+            path: "{{ render_dir.path }}"
+            state: absent
+          ignore_errors: true

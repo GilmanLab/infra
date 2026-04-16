@@ -1,0 +1,14 @@
+launch=lmdb
+lmdb-filename=/var/lib/powerdns/pdns.lmdb
+local-address={{ pdns_service_ip }}
+local-port=53
+api=yes
+api-key={{ pdns_credentials.api_key }}
+webserver=yes
+webserver-address=127.0.0.1
+webserver-port=8081
+dnsupdate=yes
+dnsupdate-require-tsig=yes
+allow-dnsupdate-from=
+default-soa-content=ns1.lab.gilman.io hostmaster.@ 0 10800 3600 604800 3600
+disable-syslog=yes

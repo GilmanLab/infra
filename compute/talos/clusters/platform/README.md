@@ -14,6 +14,9 @@ configuration used to bootstrap the platform cluster on the `UM760`.
 - `clusterctl.py` is a self-contained `uv` script for generating encrypted
   secrets, rendering Talos outputs, validating the rendered control-plane
   config, and generating a plain UEFI ISO with embedded config.
+- `scripts/bootstrap.py` is a self-contained `uv` script that reads the
+  rendered control-plane config, discovers the node IP, and runs
+  `talosctl bootstrap` only when etcd is not already initialized.
 - `Justfile` exposes the operator entrypoints.
 
 ## Prerequisites
@@ -35,13 +38,20 @@ configuration used to bootstrap the platform cluster on the `UM760`.
 4. `just iso-generate`
 5. Boot the ISO on the target machine
 6. `just bootstrap`
+7. `just kubeconfig`
 
 Rendered outputs are disposable and live under `.state/rendered/`.
 Generated ISO assets and metadata live under `.state/boot-assets/`.
 
-`just bootstrap` reads the control-plane IP from `.state/rendered/controlplane.yaml`
-and uses `.state/rendered/talosconfig` for Talos API authentication, so the
-recipe does not hardcode any node address.
+`just bootstrap` runs `scripts/bootstrap.py`, which reads the control-plane IP
+from `.state/rendered/controlplane.yaml` and uses
+`.state/rendered/talosconfig` for Talos API authentication, so the workflow
+does not hardcode any node address.
+
+`just kubeconfig` reads the same rendered control-plane IP and Talos client
+config, then runs `talosctl kubeconfig --force-context-name platform --force`
+against that node so the admin kubeconfig is merged into the local default
+kubectl config under the stable context name `platform`.
 
 ## Boot Asset Flow
 

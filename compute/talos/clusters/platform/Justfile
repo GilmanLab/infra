@@ -1,29 +1,46 @@
+# List the available platform Talos cluster recipes.
 default:
     @just --list
 
+# Generate and encrypt a fresh Talos secrets bundle in the sibling secrets repo.
 secrets-generate:
     uv run clusterctl.py generate-secrets
 
+# Render Talos machine config outputs into .state/rendered/.
 render:
     uv run clusterctl.py render
 
+# Validate the rendered control-plane configuration with talosctl.
 validate:
     uv run clusterctl.py validate
 
+# Build a plain UEFI Talos ISO with the rendered config embedded.
 iso-generate:
     uv run clusterctl.py generate-iso
 
+# Bootstrap the control plane if the rendered node is not already bootstrapped.
 bootstrap: render validate
-    @node_ip=$(yq -r '.addresses[]?.address' .state/rendered/controlplane.yaml | head -n1 | cut -d/ -f1); \
-    if [ -z "$node_ip" ]; then \
-        echo "error: failed to determine control-plane IP from .state/rendered/controlplane.yaml" >&2; \
-        exit 1; \
-    fi; \
-    if talosctl --talosconfig .state/rendered/talosconfig -e "$node_ip" -n "$node_ip" etcd members >/dev/null 2>&1; then \
-        echo "cluster already bootstrapped at $node_ip"; \
-    else \
-        talosctl --talosconfig .state/rendered/talosconfig -e "$node_ip" -n "$node_ip" bootstrap; \
+    uv run scripts/bootstrap.py
+
+# Download and merge the admin kubeconfig into the local kubectl config.
+kubeconfig: render validate
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    node_ip="$(yq -r '.addresses[]?.address' .state/rendered/controlplane.yaml | head -n1 | cut -d/ -f1)"
+    if [[ -z "${node_ip}" ]]; then
+        echo "error: failed to determine control-plane IP from .state/rendered/controlplane.yaml" >&2
+        exit 1
     fi
 
+    talosctl \
+        --talosconfig .state/rendered/talosconfig \
+        -e "${node_ip}" \
+        -n "${node_ip}" \
+        kubeconfig \
+        --force-context-name platform \
+        --force
+
+# Remove disposable rendered outputs and generated boot assets.
 clean:
     rm -rf .state

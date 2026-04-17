@@ -1,0 +1,10 @@
+---
+tailscale_image: docker.io/tailscale/tailscale:v1.96.5
+tailscale_hostname: glab-vyos-subnet-router
+tailscale_tag: tag:subnet-router
+tailscale_state_dir: /config/containers/tailscale/state
+tailscale_container_state_dir: /var/lib/tailscale
+tailscale_routes:
+  - 10.10.0.0/16
+  - 192.168.1.0/24
+  - 192.168.2.0/24

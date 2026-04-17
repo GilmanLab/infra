@@ -33,9 +33,15 @@ configuration used to bootstrap the platform cluster on the `UM760`.
 2. `just render`
 3. `just validate`
 4. `just iso-generate`
+5. Boot the ISO on the target machine
+6. `just bootstrap`
 
 Rendered outputs are disposable and live under `.state/rendered/`.
 Generated ISO assets and metadata live under `.state/boot-assets/`.
+
+`just bootstrap` reads the control-plane IP from `.state/rendered/controlplane.yaml`
+and uses `.state/rendered/talosconfig` for Talos API authentication, so the
+recipe does not hardcode any node address.
 
 ## Boot Asset Flow
 

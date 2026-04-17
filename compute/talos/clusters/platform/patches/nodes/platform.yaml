@@ -11,11 +11,19 @@ apiVersion: v1alpha1
 kind: LinkAliasConfig
 name: net0
 selector:
-  match: 'glob("38:05:25:34:25:d0", mac(link.permanent_addr))'
+  match: true
 ---
 apiVersion: v1alpha1
 kind: LinkConfig
 name: net0
+up: true
+---
+apiVersion: v1alpha1
+kind: VLANConfig
+name: net0.10
+vlanID: 10
+parent: net0
+up: true
 addresses:
   - address: 10.10.10.10/24
 routes:

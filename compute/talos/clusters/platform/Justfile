@@ -13,5 +13,17 @@ validate:
 iso-generate:
     uv run clusterctl.py generate-iso
 
+bootstrap: render validate
+    @node_ip=$(yq -r '.addresses[]?.address' .state/rendered/controlplane.yaml | head -n1 | cut -d/ -f1); \
+    if [ -z "$node_ip" ]; then \
+        echo "error: failed to determine control-plane IP from .state/rendered/controlplane.yaml" >&2; \
+        exit 1; \
+    fi; \
+    if talosctl --talosconfig .state/rendered/talosconfig -e "$node_ip" -n "$node_ip" etcd members >/dev/null 2>&1; then \
+        echo "cluster already bootstrapped at $node_ip"; \
+    else \
+        talosctl --talosconfig .state/rendered/talosconfig -e "$node_ip" -n "$node_ip" bootstrap; \
+    fi
+
 clean:
     rm -rf .state

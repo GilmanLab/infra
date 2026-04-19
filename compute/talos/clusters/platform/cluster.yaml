@@ -9,6 +9,19 @@ bootAssets:
   arch: amd64
   outputDir: .state/boot-assets
   schematicFile: schematic.yaml
+bootstrapArtifacts:
+  repo:
+    owner: GilmanLab
+    name: platform
+  cilium:
+    ref: f1a9f5627f0a74596834f002f5957962846ab3a2
+    path: bootstrap/cilium/render/public.yaml
+  argocd:
+    ref: 6392d84091e8b8d56bda31b162fcda00ce5088eb
+    path: bootstrap/argocd/render/install.yaml
+  kro:
+    ref: 9e9647394d8047c887fd3ea11be6302ca003165a
+    path: bootstrap/kro/render/install.yaml
 nodes:
   controlPlane:
     - name: platform

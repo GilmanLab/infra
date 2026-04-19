@@ -6,7 +6,8 @@ configuration used to bootstrap the platform cluster on the `UM760`.
 ## Layout
 
 - `cluster.yaml` defines the cluster identity, pinned versions, secret lookup,
-  and output location.
+  output location, and the bootstrap artifact refs consumed from the `platform`
+  repo.
 - `schematic.yaml` is the durable boot-asset input used to resolve the Image
   Factory schematic ID.
 - `patches/` holds stable patch files for cluster-wide, control-plane, and
@@ -52,6 +53,29 @@ does not hardcode any node address.
 config, then runs `talosctl kubeconfig --force-context-name platform --force`
 against that node so the admin kubeconfig is merged into the local default
 kubectl config under the stable context name `platform`.
+
+## Bootstrap Artifact Contract
+
+`cluster.yaml` carries the commit-pinned bootstrap artifact source under
+`bootstrapArtifacts`.
+
+- `repo.owner` / `repo.name` identify the public `platform` repo.
+- each component `ref` must be the full commit SHA that corresponds to the
+  released tag chosen for that component bootstrap artifact.
+- each component `path` points at the tracked rendered manifest in that repo.
+
+`clusterctl.py` converts those fields into raw GitHub URLs and synthesizes the
+Talos bootstrap patch during render time. That patch:
+
+- configures Talos to use the released Cilium manifest as the custom CNI
+- disables kube-proxy for kube-proxy-free Cilium
+- installs Argo CD and kro via `extraManifests`
+
+The current pinned release refs are:
+
+- `cilium-v1.0.0` -> `f1a9f5627f0a74596834f002f5957962846ab3a2`
+- `argocd-v1.0.0` -> `6392d84091e8b8d56bda31b162fcda00ce5088eb`
+- `kro-v1.0.0` -> `9e9647394d8047c887fd3ea11be6302ca003165a`
 
 ## Boot Asset Flow
 

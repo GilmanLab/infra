@@ -15,6 +15,10 @@ configuration used to bootstrap the platform cluster on the `UM760`.
 - `clusterctl.py` is a self-contained `uv` script for generating encrypted
   secrets, rendering Talos outputs, validating the rendered control-plane
   config, and generating a plain UEFI ISO with embedded config.
+- `manifests/` holds cluster-local day-2 resources that are applied directly to
+  the live platform cluster rather than baked into the Talos bootstrap
+  artifact. The first such bundle is the Cilium LB IPAM + BGP config plus the
+  Argo CD `LoadBalancer` service patch.
 - `scripts/bootstrap.py` is a self-contained `uv` script that reads the
   rendered control-plane config, discovers the node IP, and runs
   `talosctl bootstrap` only when etcd is not already initialized.
@@ -54,6 +58,28 @@ config, then runs `talosctl kubeconfig --force-context-name platform --force`
 against that node so the admin kubeconfig is merged into the local default
 kubectl config under the stable context name `platform`.
 
+## Live Cilium BGP / LB Workflow
+
+The platform cluster keeps the Cilium core bootstrap artifact in Talos machine
+config, but the cluster-local BGP peering, LB IPAM pool, and Argo CD service
+exposure are applied directly to the live cluster.
+
+The expected sequence is:
+
+1. apply the updated branch-local Cilium render to the cluster
+2. `just cilium-bgp-apply`
+3. `just argocd-server-lb-apply`
+4. `just cilium-bgp-status`
+5. `just argocd-server-lb-status`
+
+This first cut is intentionally scoped to the current single-node `platform`
+cluster:
+
+- active BGP peer: `10.10.10.1` (`VP6630`)
+- active Cilium node: `10.10.10.10`
+- LB IPAM pool: `10.10.10.64/28`
+- advertised service: `argocd/argocd-server`
+
 ## Bootstrap Artifact Contract
 
 `cluster.yaml` carries the commit-pinned bootstrap artifact source under
@@ -73,8 +99,8 @@ Talos bootstrap patch during render time. That patch:
 
 The current pinned release refs are:
 
-- `cilium-v1.0.0` -> `f1a9f5627f0a74596834f002f5957962846ab3a2`
-- `argocd-v1.0.0` -> `6392d84091e8b8d56bda31b162fcda00ce5088eb`
+- `cilium-v1.1.0` -> `8468c1520f51e7f247f3c8cba5eb9fab98e5ad49`
+- `argocd-v1.0.1` -> `f12b0e58e8dd7187d7302089c1b08a8de1baa28c`
 - `kro-v1.0.0` -> `9e9647394d8047c887fd3ea11be6302ca003165a`
 
 ## Boot Asset Flow

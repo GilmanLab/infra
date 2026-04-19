@@ -1,0 +1,61 @@
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: platform-argocd-lb
+spec:
+  allowFirstLastIPs: "No"
+  blocks:
+    - cidr: 10.10.10.64/28
+  serviceSelector:
+    matchLabels:
+      io.kubernetes.service.namespace: argocd
+      io.kubernetes.service.name: argocd-server
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPPeerConfig
+metadata:
+  name: platform-vyos-peer
+spec:
+  transport:
+    peerPort: 179
+  families:
+    - afi: ipv4
+      safi: unicast
+      advertisements:
+        matchLabels:
+          advertise: platform-lb
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata:
+  name: platform-lb-advertisements
+  labels:
+    advertise: platform-lb
+spec:
+  advertisements:
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+      selector:
+        matchLabels:
+          io.kubernetes.service.namespace: argocd
+          io.kubernetes.service.name: argocd-server
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: platform-vyos
+spec:
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/hostname: platform
+  bgpInstances:
+    - name: platform-vyos
+      localASN: 64513
+      peers:
+        - name: vyos-10-10-10-1
+          peerASN: 64512
+          peerAddress: 10.10.10.1
+          peerConfigRef:
+            name: platform-vyos-peer

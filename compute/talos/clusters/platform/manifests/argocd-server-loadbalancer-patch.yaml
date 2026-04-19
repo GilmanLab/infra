@@ -1,0 +1,4 @@
+spec:
+  type: LoadBalancer
+  loadBalancerClass: io.cilium/bgp-control-plane
+  externalTrafficPolicy: Local

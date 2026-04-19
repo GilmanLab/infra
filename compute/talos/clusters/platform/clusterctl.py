@@ -1,7 +1,9 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.11"
-# dependencies = []
+# dependencies = [
+#   "PyYAML>=6.0,<7",
+# ]
 # ///
 """Local helper for the platform Talos cluster scaffold."""
 
@@ -18,6 +20,8 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+import yaml
 
 
 ROOT = Path(__file__).resolve().parent
@@ -119,6 +123,38 @@ def load_boot_assets(config: dict) -> dict:
     return boot_assets
 
 
+def load_bootstrap_artifacts(config: dict) -> dict:
+    bootstrap = config.get("bootstrapArtifacts")
+    if not isinstance(bootstrap, dict):
+        raise ClusterError("cluster.yaml is missing required bootstrapArtifacts section")
+
+    repo = bootstrap.get("repo")
+    if not isinstance(repo, dict):
+        raise ClusterError("bootstrapArtifacts is missing required repo section")
+
+    repo_required = ["owner", "name"]
+    repo_missing = [field for field in repo_required if not repo.get(field)]
+    if repo_missing:
+        raise ClusterError(f"bootstrapArtifacts.repo is missing required field(s): {', '.join(repo_missing)}")
+
+    required = ["cilium", "argocd", "kro"]
+    missing = [field for field in required if not bootstrap.get(field)]
+    if missing:
+        raise ClusterError(f"bootstrapArtifacts is missing required field(s): {', '.join(missing)}")
+
+    for component in ("cilium", "argocd", "kro"):
+        value = bootstrap.get(component)
+        if not isinstance(value, dict):
+            raise ClusterError(f"bootstrapArtifacts.{component} must be a mapping")
+        component_missing = [field for field in ("ref", "path") if not value.get(field)]
+        if component_missing:
+            raise ClusterError(
+                f"bootstrapArtifacts.{component} is missing required field(s): {', '.join(component_missing)}"
+            )
+
+    return bootstrap
+
+
 def get_secrets_root() -> Path:
     raw = os.environ.get("GLAB_SECRETS_DIR")
     if not raw:
@@ -151,6 +187,38 @@ def schematic_path(boot_assets: dict) -> Path:
 
 def node_patch_path(node_name: str) -> Path:
     return PATCHES_DIR / "nodes" / f"{node_name}.yaml"
+
+
+def raw_github_url(owner: str, repo: str, ref: str, path: str) -> str:
+    return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
+
+
+def bootstrap_patch(config: dict) -> dict:
+    bootstrap = load_bootstrap_artifacts(config)
+    repo = bootstrap["repo"]
+    owner = repo["owner"]
+    name = repo["name"]
+    cilium_url = raw_github_url(owner, name, bootstrap["cilium"]["ref"], bootstrap["cilium"]["path"])
+    argocd_url = raw_github_url(owner, name, bootstrap["argocd"]["ref"], bootstrap["argocd"]["path"])
+    kro_url = raw_github_url(owner, name, bootstrap["kro"]["ref"], bootstrap["kro"]["path"])
+
+    return {
+        "cluster": {
+            "network": {
+                "cni": {
+                    "name": "custom",
+                    "urls": [cilium_url],
+                }
+            },
+            "proxy": {
+                "disabled": True,
+            },
+            "extraManifests": [
+                argocd_url,
+                kro_url,
+            ],
+        }
+    }
 
 
 def render_outputs(
@@ -191,6 +259,14 @@ def render_outputs(
                 str(encrypted),
             ]
         )
+        bootstrap_patch_file = Path(tmpdir) / "bootstrap-manifests.yaml"
+        try:
+            bootstrap_patch_file.write_text(
+                yaml.safe_dump(bootstrap_patch(config), sort_keys=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise ClusterError(f"failed to write bootstrap patch file: {exc}") from exc
         cmd = [
             "talosctl",
             "gen",
@@ -214,6 +290,8 @@ def render_outputs(
             cmd.extend(["--install-image", install_image])
         cmd.extend(
             [
+                "--config-patch",
+                f"@{bootstrap_patch_file}",
                 "--config-patch",
                 f"@{PATCHES_DIR / 'common.yaml'}",
                 "--config-patch-control-plane",

@@ -8,4 +8,4 @@ machine:
       enabled: true
     hostDNS:
       enabled: true
-      forwardKubeDNSToHost: true
+      forwardKubeDNSToHost: false

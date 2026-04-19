@@ -18,7 +18,7 @@ import sys
 import yaml
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONTROLPLANE_CONFIG = ROOT / ".state" / "rendered" / "controlplane.yaml"
 DEFAULT_TALOSCONFIG = ROOT / ".state" / "rendered" / "talosconfig"
 
@@ -71,21 +71,22 @@ def ensure_file(path: Path, label: str) -> None:
 
 def control_plane_ip(path: Path) -> str:
     with path.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh)
+        documents = [doc for doc in yaml.safe_load_all(fh) if isinstance(doc, dict)]
 
-    if not isinstance(data, dict):
-        raise BootstrapError(f"rendered control-plane config is not a mapping: {path}")
+    if not documents:
+        raise BootstrapError(f"rendered control-plane config has no YAML mapping documents: {path}")
 
-    addresses = data.get("addresses")
-    if not isinstance(addresses, list):
-        raise BootstrapError(f"rendered control-plane config has no addresses list: {path}")
-
-    for entry in addresses:
-        if not isinstance(entry, dict):
+    for data in documents:
+        addresses = data.get("addresses")
+        if not isinstance(addresses, list):
             continue
-        address = entry.get("address")
-        if isinstance(address, str) and address:
-            return address.split("/", 1)[0]
+
+        for entry in addresses:
+            if not isinstance(entry, dict):
+                continue
+            address = entry.get("address")
+            if isinstance(address, str) and address:
+                return address.split("/", 1)[0]
 
     raise BootstrapError(f"failed to determine control-plane IP from {path}")
 

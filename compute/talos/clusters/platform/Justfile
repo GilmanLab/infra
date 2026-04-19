@@ -41,26 +41,6 @@ kubeconfig: render validate
         --force-context-name platform \
         --force
 
-# Apply the cluster-local Cilium LB IPAM and BGP resources to the live platform cluster.
-cilium-bgp-apply:
-    kubectl --context platform apply -f manifests/cilium-bgp-lb.yaml
-
-# Expose the Argo CD server service through a Cilium-managed LoadBalancer IP.
-argocd-server-lb-apply:
-    kubectl --context platform patch service argocd-server -n argocd --type merge --patch-file manifests/argocd-server-loadbalancer-patch.yaml
-
-# Show the assigned Argo CD LoadBalancer VIP and service status.
-argocd-server-lb-status:
-    kubectl --context platform get service argocd-server -n argocd -o wide
-
-# Show Cilium BGP/LB resources on the platform cluster.
-cilium-bgp-status:
-    kubectl --context platform get CiliumLoadBalancerIPPool,CiliumBGPPeerConfig,CiliumBGPAdvertisement,CiliumBGPClusterConfig
-
-# Show the advertised Argo CD service state and current LoadBalancer IP.
-argocd-server-lb-vip:
-    kubectl --context platform get service argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].ip}{"\n"}'
-
 # Remove disposable rendered outputs and generated boot assets.
 clean:
     rm -rf .state

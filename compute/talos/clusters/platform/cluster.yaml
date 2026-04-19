@@ -14,14 +14,14 @@ bootstrapArtifacts:
     owner: GilmanLab
     name: platform
   cilium:
-    ref: 8468c1520f51e7f247f3c8cba5eb9fab98e5ad49
-    path: bootstrap/cilium/render/public.yaml
+    ref: e9a2ed85255af83f8435c35b0086fe6a42f5aebe
+    path: bootstrap/cilium/render/bootstrap.yaml
   argocd:
-    ref: f12b0e58e8dd7187d7302089c1b08a8de1baa28c
-    path: bootstrap/argocd/render/install.yaml
+    ref: e9a2ed85255af83f8435c35b0086fe6a42f5aebe
+    path: bootstrap/argocd/render/bootstrap.yaml
   kro:
-    ref: 9e9647394d8047c887fd3ea11be6302ca003165a
-    path: bootstrap/kro/render/install.yaml
+    ref: e9a2ed85255af83f8435c35b0086fe6a42f5aebe
+    path: bootstrap/kro/render/full.yaml
 nodes:
   controlPlane:
     - name: platform

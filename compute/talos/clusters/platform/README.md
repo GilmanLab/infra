@@ -15,10 +15,6 @@ configuration used to bootstrap the platform cluster on the `UM760`.
 - `clusterctl.py` is a self-contained `uv` script for generating encrypted
   secrets, rendering Talos outputs, validating the rendered control-plane
   config, and generating a plain UEFI ISO with embedded config.
-- `manifests/` holds cluster-local day-2 resources that are applied directly to
-  the live platform cluster rather than baked into the Talos bootstrap
-  artifact. The first such bundle is the Cilium LB IPAM + BGP config plus the
-  Argo CD `LoadBalancer` service patch.
 - `scripts/bootstrap.py` is a self-contained `uv` script that reads the
   rendered control-plane config, discovers the node IP, and runs
   `talosctl bootstrap` only when etcd is not already initialized.
@@ -57,28 +53,6 @@ does not hardcode any node address.
 config, then runs `talosctl kubeconfig --force-context-name platform --force`
 against that node so the admin kubeconfig is merged into the local default
 kubectl config under the stable context name `platform`.
-
-## Live Cilium BGP / LB Workflow
-
-The platform cluster keeps the Cilium core bootstrap artifact in Talos machine
-config, but the cluster-local BGP peering, LB IPAM pool, and Argo CD service
-exposure are applied directly to the live cluster.
-
-The expected sequence is:
-
-1. apply the updated branch-local Cilium render to the cluster
-2. `just cilium-bgp-apply`
-3. `just argocd-server-lb-apply`
-4. `just cilium-bgp-status`
-5. `just argocd-server-lb-status`
-
-This first cut is intentionally scoped to the current single-node `platform`
-cluster:
-
-- active BGP peer: `10.10.10.1` (`VP6630`)
-- active Cilium node: `10.10.10.10`
-- LB IPAM pool: `10.10.10.64/28`
-- advertised service: `argocd/argocd-server`
 
 ## Bootstrap Artifact Contract
 

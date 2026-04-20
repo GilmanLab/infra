@@ -22,6 +22,9 @@ bootstrapArtifacts:
   argocd:
     ref: 1975c907150b5d5f5b6f51dbb743653e063e7c6c
     path: bootstrap/argocd/render/bootstrap.yaml
+  bootstrapProject:
+    ref: 6a216ec116d2c594e535834c1799692f1e934452
+    path: platform/argocd/projects/platform-bootstrap.yaml
   rootApp:
     ref: 6a216ec116d2c594e535834c1799692f1e934452
     path: platform/argocd/bootstrap.yaml

@@ -59,23 +59,27 @@ kubectl config under the stable context name `platform`.
 `cluster.yaml` carries the commit-pinned bootstrap artifact source under
 `bootstrapArtifacts`.
 
-- `repo.owner` / `repo.name` identify the public `platform` repo.
+- `platformRepo.owner` / `platformRepo.name` identify the public `platform`
+  repo for the Talos-consumed raw bootstrap manifests.
+- `gitopsRepo.owner` / `gitopsRepo.name` identify the public `gitops` repo for
+  the Talos-seeded root Argo CD `Application`.
 - each component `ref` must be the full commit SHA that corresponds to the
-  released tag chosen for that component bootstrap artifact.
-- each component `path` points at the tracked rendered manifest in that repo.
+  released tag or merged GitOps commit chosen for that bootstrap artifact.
+- each component `path` points at the tracked manifest in that repo.
 
 `clusterctl.py` converts those fields into raw GitHub URLs and synthesizes the
 Talos bootstrap patch during render time. That patch:
 
 - configures Talos to use the released Cilium manifest as the custom CNI
 - disables kube-proxy for kube-proxy-free Cilium
-- installs Argo CD and kro via `extraManifests`
+- installs minimal Argo CD and then seeds the root Argo CD `Application` from
+  `gitops` via `extraManifests`
 
 The current pinned release refs are:
 
-- `cilium-v1.1.0` -> `8468c1520f51e7f247f3c8cba5eb9fab98e5ad49`
-- `argocd-v1.0.1` -> `f12b0e58e8dd7187d7302089c1b08a8de1baa28c`
-- `kro-v1.0.0` -> `9e9647394d8047c887fd3ea11be6302ca003165a`
+- `cilium-v1.2.0` -> `4780b373f6d255e44effdaf9115406ec2958dcd5`
+- `argocd-v1.1.0` -> `1975c907150b5d5f5b6f51dbb743653e063e7c6c`
+- `gitops` root app -> `6a216ec116d2c594e535834c1799692f1e934452`
 
 ## Boot Asset Flow
 

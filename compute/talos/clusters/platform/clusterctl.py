@@ -128,21 +128,33 @@ def load_bootstrap_artifacts(config: dict) -> dict:
     if not isinstance(bootstrap, dict):
         raise ClusterError("cluster.yaml is missing required bootstrapArtifacts section")
 
-    repo = bootstrap.get("repo")
-    if not isinstance(repo, dict):
-        raise ClusterError("bootstrapArtifacts is missing required repo section")
+    platform_repo = bootstrap.get("platformRepo")
+    if not isinstance(platform_repo, dict):
+        raise ClusterError("bootstrapArtifacts is missing required platformRepo section")
 
     repo_required = ["owner", "name"]
-    repo_missing = [field for field in repo_required if not repo.get(field)]
+    repo_missing = [field for field in repo_required if not platform_repo.get(field)]
     if repo_missing:
-        raise ClusterError(f"bootstrapArtifacts.repo is missing required field(s): {', '.join(repo_missing)}")
+        raise ClusterError(
+            f"bootstrapArtifacts.platformRepo is missing required field(s): {', '.join(repo_missing)}"
+        )
 
-    required = ["cilium", "argocd", "kro"]
+    gitops_repo = bootstrap.get("gitopsRepo")
+    if not isinstance(gitops_repo, dict):
+        raise ClusterError("bootstrapArtifacts is missing required gitopsRepo section")
+
+    gitops_missing = [field for field in repo_required if not gitops_repo.get(field)]
+    if gitops_missing:
+        raise ClusterError(
+            f"bootstrapArtifacts.gitopsRepo is missing required field(s): {', '.join(gitops_missing)}"
+        )
+
+    required = ["cilium", "argocd", "rootApp"]
     missing = [field for field in required if not bootstrap.get(field)]
     if missing:
         raise ClusterError(f"bootstrapArtifacts is missing required field(s): {', '.join(missing)}")
 
-    for component in ("cilium", "argocd", "kro"):
+    for component in ("cilium", "argocd", "rootApp"):
         value = bootstrap.get(component)
         if not isinstance(value, dict):
             raise ClusterError(f"bootstrapArtifacts.{component} must be a mapping")
@@ -195,12 +207,21 @@ def raw_github_url(owner: str, repo: str, ref: str, path: str) -> str:
 
 def bootstrap_patch(config: dict) -> dict:
     bootstrap = load_bootstrap_artifacts(config)
-    repo = bootstrap["repo"]
-    owner = repo["owner"]
-    name = repo["name"]
-    cilium_url = raw_github_url(owner, name, bootstrap["cilium"]["ref"], bootstrap["cilium"]["path"])
-    argocd_url = raw_github_url(owner, name, bootstrap["argocd"]["ref"], bootstrap["argocd"]["path"])
-    kro_url = raw_github_url(owner, name, bootstrap["kro"]["ref"], bootstrap["kro"]["path"])
+    platform_repo = bootstrap["platformRepo"]
+    platform_owner = platform_repo["owner"]
+    platform_name = platform_repo["name"]
+    gitops_repo = bootstrap["gitopsRepo"]
+    gitops_owner = gitops_repo["owner"]
+    gitops_name = gitops_repo["name"]
+    cilium_url = raw_github_url(
+        platform_owner, platform_name, bootstrap["cilium"]["ref"], bootstrap["cilium"]["path"]
+    )
+    argocd_url = raw_github_url(
+        platform_owner, platform_name, bootstrap["argocd"]["ref"], bootstrap["argocd"]["path"]
+    )
+    root_app_url = raw_github_url(
+        gitops_owner, gitops_name, bootstrap["rootApp"]["ref"], bootstrap["rootApp"]["path"]
+    )
 
     return {
         "cluster": {
@@ -215,7 +236,7 @@ def bootstrap_patch(config: dict) -> dict:
             },
             "extraManifests": [
                 argocd_url,
-                kro_url,
+                root_app_url,
             ],
         }
     }

@@ -73,8 +73,8 @@ Talos bootstrap patch during render time. That patch:
 
 The current pinned release refs are:
 
-- `cilium-v1.0.0` -> `f1a9f5627f0a74596834f002f5957962846ab3a2`
-- `argocd-v1.0.0` -> `6392d84091e8b8d56bda31b162fcda00ce5088eb`
+- `cilium-v1.1.0` -> `8468c1520f51e7f247f3c8cba5eb9fab98e5ad49`
+- `argocd-v1.0.1` -> `f12b0e58e8dd7187d7302089c1b08a8de1baa28c`
 - `kro-v1.0.0` -> `9e9647394d8047c887fd3ea11be6302ca003165a`
 
 ## Boot Asset Flow

@@ -149,12 +149,12 @@ def load_bootstrap_artifacts(config: dict) -> dict:
             f"bootstrapArtifacts.gitopsRepo is missing required field(s): {', '.join(gitops_missing)}"
         )
 
-    required = ["cilium", "argocd", "rootApp"]
+    required = ["cilium", "argocd", "bootstrapProject", "rootApp"]
     missing = [field for field in required if not bootstrap.get(field)]
     if missing:
         raise ClusterError(f"bootstrapArtifacts is missing required field(s): {', '.join(missing)}")
 
-    for component in ("cilium", "argocd", "rootApp"):
+    for component in ("cilium", "argocd", "bootstrapProject", "rootApp"):
         value = bootstrap.get(component)
         if not isinstance(value, dict):
             raise ClusterError(f"bootstrapArtifacts.{component} must be a mapping")
@@ -219,6 +219,12 @@ def bootstrap_patch(config: dict) -> dict:
     argocd_url = raw_github_url(
         platform_owner, platform_name, bootstrap["argocd"]["ref"], bootstrap["argocd"]["path"]
     )
+    bootstrap_project_url = raw_github_url(
+        gitops_owner,
+        gitops_name,
+        bootstrap["bootstrapProject"]["ref"],
+        bootstrap["bootstrapProject"]["path"],
+    )
     root_app_url = raw_github_url(
         gitops_owner, gitops_name, bootstrap["rootApp"]["ref"], bootstrap["rootApp"]["path"]
     )
@@ -236,6 +242,7 @@ def bootstrap_patch(config: dict) -> dict:
             },
             "extraManifests": [
                 argocd_url,
+                bootstrap_project_url,
                 root_app_url,
             ],
         }

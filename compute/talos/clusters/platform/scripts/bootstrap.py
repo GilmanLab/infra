@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import time
+from typing import NamedTuple
 
 import yaml
 
@@ -31,6 +32,11 @@ BOOTSTRAP_TIMEOUT_SECONDS = int(os.environ.get("GLAB_TALOS_BOOTSTRAP_ACTION_TIME
 
 class BootstrapError(RuntimeError):
     """Raised when bootstrap prerequisites are not met."""
+
+
+class ServiceStatus(NamedTuple):
+    state: str
+    health: str
 
 
 def main() -> int:
@@ -173,15 +179,45 @@ def wait_for_api(talosconfig: Path, node_ip: str) -> None:
 
 
 def is_bootstrapped(talosconfig: Path, node_ip: str) -> bool:
-    result = run_talosctl(
-        talosconfig,
-        node_ip,
-        "etcd",
-        "members",
-        timeout=COMMAND_TIMEOUT_SECONDS,
-        check=False,
+    cmd = talosctl_cmd(talosconfig, node_ip, "etcd", "members")
+    try:
+        result = subprocess.run(
+            cmd,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        status = etcd_service_status(talosconfig, node_ip)
+        if should_attempt_bootstrap(status):
+            print(
+                f"etcd service is {status.state} (health: {status.health}); proceeding with bootstrap",
+                flush=True,
+            )
+            return False
+        raise BootstrapError(
+            f"{' '.join(cmd)} timed out after {COMMAND_TIMEOUT_SECONDS}s while etcd service "
+            f"is {status.state} (health: {status.health})"
+        ) from None
+
+    if result.returncode == 0:
+        return True
+
+    status = etcd_service_status(talosconfig, node_ip)
+    if should_attempt_bootstrap(status):
+        print(
+            f"etcd service is {status.state} (health: {status.health}); proceeding with bootstrap",
+            flush=True,
+        )
+        return False
+
+    details = format_result_error(result.stdout, result.stderr)
+    suffix = f": {details}" if details else ""
+    raise BootstrapError(
+        f"{' '.join(cmd)} exited with status {result.returncode}{suffix} while etcd service "
+        f"is {status.state} (health: {status.health})"
     )
-    return result.returncode == 0
 
 
 def bootstrap(talosconfig: Path, node_ip: str) -> None:
@@ -193,6 +229,43 @@ def bootstrap(talosconfig: Path, node_ip: str) -> None:
         timeout=BOOTSTRAP_TIMEOUT_SECONDS,
         check=True,
     )
+
+
+def etcd_service_status(talosconfig: Path, node_ip: str) -> ServiceStatus:
+    result = run_talosctl(
+        talosconfig,
+        node_ip,
+        "service",
+        "etcd",
+        timeout=COMMAND_TIMEOUT_SECONDS,
+        check=True,
+    )
+    return parse_service_status(result.stdout)
+
+
+def parse_service_status(output: str) -> ServiceStatus:
+    state = ""
+    health = ""
+
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if line.startswith("STATE"):
+            state = line.split(None, 1)[1].strip()
+        elif line.startswith("HEALTH"):
+            health = line.split(None, 1)[1].strip()
+
+    if not state:
+        raise BootstrapError("failed to determine etcd service state from talosctl output")
+
+    return ServiceStatus(state=state, health=health or "?")
+
+
+def should_attempt_bootstrap(status: ServiceStatus) -> bool:
+    if status.state in {"Preparing", "Starting"}:
+        return True
+    if status.state == "Running" and status.health in {"", "?"}:
+        return True
+    return False
 
 
 def format_result_error(stdout: str, stderr: str) -> str:

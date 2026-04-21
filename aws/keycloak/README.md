@@ -9,15 +9,17 @@ This stack creates:
 - an IAM role and instance profile for SSM management
 - a security group that exposes HTTPS only to lab CIDRs
 - a private Route 53 `A` record for `id.glab.lol`
+- scoped Route 53 permissions for ACME DNS-01 validation in `acme.glab.lol`
 - an SSM-driven Docker Compose deployment for Postgres, Keycloak, and Traefik
 
 This stack intentionally stops at starting Keycloak. It does **not** configure
 realms, GitHub OIDC, clients, backups, Synology sync, Kubernetes OIDC, Argo CD,
 Grafana, IAM Identity Center federation, or `keycloak-config-cli`.
 
-The first bring-up uses a temporary self-signed certificate on Traefik. Public
-ACME DNS-01 is deferred because the existing `glab.lol` Route 53 zone is
-private and public CAs must validate DNS challenges through public DNS.
+Traefik obtains the `id.glab.lol` certificate from Let's Encrypt through
+DNS-01. Cloudflare delegates `_acme-challenge.id.glab.lol` to the public
+Route 53 `acme.glab.lol` zone, and the Keycloak instance role may mutate only
+the delegated TXT record for this hostname.
 
 ## Prerequisites
 
@@ -27,6 +29,10 @@ private and public CAs must validate DNS challenges through public DNS.
 - `GLAB_AWS_STATE_BUCKET` set to the pre-created S3 backend bucket in the
   `lab` account
 - the `aws/lab-foundation` and `aws/subnet-router` stacks already applied
+- Cloudflare delegates `acme.glab.lol` to the `aws/lab-foundation`
+  `acme_zone_name_servers` output and sets
+  `_acme-challenge.id.glab.lol` as a CNAME to
+  `_acme-challenge.id.acme.glab.lol`
 
 The expected local operator flow is to export both values via `direnv`.
 

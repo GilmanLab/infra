@@ -43,6 +43,17 @@ variable "private_zone_name" {
   }
 }
 
+variable "acme_zone_name" {
+  description = "Public Route 53 zone delegated from Cloudflare for ACME DNS-01 validation records."
+  type        = string
+  default     = "acme.glab.lol"
+
+  validation {
+    condition     = length(trimspace(var.acme_zone_name)) > 0
+    error_message = "acme_zone_name must not be empty."
+  }
+}
+
 variable "kms_alias" {
   description = "Alias for the customer-managed KMS key used as a SOPS recipient, without the 'alias/' prefix."
   type        = string

@@ -47,14 +47,22 @@ services:
     restart: unless-stopped
     command:
       - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.${traefik_certificate_resolver}.acme.email=${acme_email}
+      - --certificatesresolvers.${traefik_certificate_resolver}.acme.storage=${traefik_acme_storage_file}
+      - --certificatesresolvers.${traefik_certificate_resolver}.acme.caserver=${acme_ca_server}
+      - --certificatesresolvers.${traefik_certificate_resolver}.acme.dnschallenge.provider=route53
+      - --certificatesresolvers.${traefik_certificate_resolver}.acme.dnschallenge.resolvers=${traefik_dns_challenge_resolvers}
       - --providers.file.filename=/etc/traefik/dynamic.yml
       - --providers.file.watch=true
       - --api.dashboard=false
       - --log.level=INFO
+    environment:
+      AWS_REGION: ${aws_region}
+      AWS_HOSTED_ZONE_ID: ${acme_zone_id}
     ports:
       - 443:443
     volumes:
-      - ./certs:/etc/traefik/certs:ro
+      - ./acme:/etc/traefik/acme
       - ./traefik_dynamic.yml:/etc/traefik/dynamic.yml:ro
     depends_on:
       - keycloak

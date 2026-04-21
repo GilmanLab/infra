@@ -2,9 +2,9 @@
 set -euo pipefail
 
 AWS_REGION='${aws_region}'
+ACME_STORAGE_HOST_DIR='${acme_storage_host_dir}'
 KEYCLOAK_RUNTIME_DIR='${keycloak_runtime_dir}'
 POSTGRES_STATE_DIR='${postgres_state_dir}'
-PRIVATE_HOSTNAME='${private_hostname}'
 POSTGRES_PASSWORD_PARAMETER='${postgres_password_parameter}'
 KEYCLOAK_ADMIN_PASSWORD_PARAMETER='${keycloak_admin_password_parameter}'
 
@@ -66,23 +66,10 @@ postgres_password="$(ensure_secure_parameter "$${POSTGRES_PASSWORD_PARAMETER}")"
 keycloak_admin_password="$(ensure_secure_parameter "$${KEYCLOAK_ADMIN_PASSWORD_PARAMETER}")"
 
 install -d -m 0755 "$${KEYCLOAK_RUNTIME_DIR}"
-install -d -m 0755 "$${KEYCLOAK_RUNTIME_DIR}/certs"
+install -d -m 0700 "$${ACME_STORAGE_HOST_DIR}"
 install -d -m 0755 "$${POSTGRES_STATE_DIR}"
-
-if [[ ! -f "$${KEYCLOAK_RUNTIME_DIR}/certs/$${PRIVATE_HOSTNAME}.crt" || ! -f "$${KEYCLOAK_RUNTIME_DIR}/certs/$${PRIVATE_HOSTNAME}.key" ]]; then
-  openssl req \
-    -x509 \
-    -newkey rsa:4096 \
-    -sha256 \
-    -days 30 \
-    -nodes \
-    -keyout "$${KEYCLOAK_RUNTIME_DIR}/certs/$${PRIVATE_HOSTNAME}.key" \
-    -out "$${KEYCLOAK_RUNTIME_DIR}/certs/$${PRIVATE_HOSTNAME}.crt" \
-    -subj "/CN=$${PRIVATE_HOSTNAME}" \
-    -addext "subjectAltName=DNS:$${PRIVATE_HOSTNAME}"
-fi
-chmod 0600 "$${KEYCLOAK_RUNTIME_DIR}/certs/$${PRIVATE_HOSTNAME}.key"
-chmod 0644 "$${KEYCLOAK_RUNTIME_DIR}/certs/$${PRIVATE_HOSTNAME}.crt"
+touch "$${ACME_STORAGE_HOST_DIR}/acme.json"
+chmod 0600 "$${ACME_STORAGE_HOST_DIR}/acme.json"
 
 cat >"$${KEYCLOAK_RUNTIME_DIR}/compose.yml" <<'EOF_COMPOSE'
 ${compose}

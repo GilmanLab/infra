@@ -35,6 +35,11 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = aws_route53_zone.acme.name == "acme.glab.lol"
+    error_message = "The public ACME validation zone should default to acme.glab.lol."
+  }
+
+  assert {
     condition     = aws_kms_alias.sops.name == "alias/glab-sops"
     error_message = "The SOPS KMS alias should match the expected default."
   }
@@ -49,6 +54,7 @@ run "plan_overrides" {
 
   variables {
     availability_zone = "us-west-2b"
+    acme_zone_name    = "acme.corp.glab.lol"
     kms_alias         = "glab-bootstrap"
     private_zone_name = "corp.glab.lol"
   }
@@ -61,6 +67,11 @@ run "plan_overrides" {
   assert {
     condition     = aws_route53_zone.private.name == "corp.glab.lol"
     error_message = "The private hosted zone should honor the overridden zone name."
+  }
+
+  assert {
+    condition     = aws_route53_zone.acme.name == "acme.corp.glab.lol"
+    error_message = "The public ACME validation zone should honor the overridden zone name."
   }
 
   assert {

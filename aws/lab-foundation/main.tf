@@ -65,6 +65,15 @@ resource "aws_route53_zone" "private" {
   }
 }
 
+resource "aws_route53_zone" "acme" {
+  name    = var.acme_zone_name
+  comment = "Public ACME DNS-01 validation zone for lab bootstrap services."
+
+  tags = merge(local.common_tags, {
+    Name = var.acme_zone_name
+  })
+}
+
 resource "aws_kms_key" "sops" {
   description             = "SOPS recipient key for lab bootstrap and automation material."
   deletion_window_in_days = var.kms_deletion_window_in_days

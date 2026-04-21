@@ -33,6 +33,21 @@ output "private_zone_name" {
   value       = aws_route53_zone.private.name
 }
 
+output "acme_zone_id" {
+  description = "Route 53 hosted zone ID for the public ACME validation zone."
+  value       = aws_route53_zone.acme.zone_id
+}
+
+output "acme_zone_name" {
+  description = "Route 53 hosted zone name for the public ACME validation zone."
+  value       = aws_route53_zone.acme.name
+}
+
+output "acme_zone_name_servers" {
+  description = "Nameservers to delegate from Cloudflare for the public ACME validation zone."
+  value       = aws_route53_zone.acme.name_servers
+}
+
 output "sops_kms_key_id" {
   description = "KMS key ID for the SOPS recipient key."
   value       = aws_kms_key.sops.key_id

@@ -24,9 +24,70 @@ data "aws_iam_policy_document" "keycloak_bootstrap_parameters" {
   }
 }
 
+data "aws_iam_policy_document" "keycloak_acme_route53" {
+  statement {
+    sid = "AllowAcmeChangePolling"
+    actions = [
+      "route53:GetChange",
+    ]
+    resources = [
+      "arn:aws:route53:::change/*",
+    ]
+  }
+
+  statement {
+    sid = "AllowAcmeZoneDiscovery"
+    actions = [
+      "route53:ListHostedZonesByName",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "AllowReadAcmeZoneRecords"
+    actions = [
+      "route53:ListResourceRecordSets",
+    ]
+    resources = [
+      data.aws_route53_zone.acme.arn,
+    ]
+  }
+
+  statement {
+    sid = "AllowWriteAcmeChallengeTxt"
+    actions = [
+      "route53:ChangeResourceRecordSets",
+    ]
+    resources = [
+      data.aws_route53_zone.acme.arn,
+    ]
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "route53:ChangeResourceRecordSetsNormalizedRecordNames"
+      values = [
+        local.acme_challenge_record_name,
+      ]
+    }
+
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "route53:ChangeResourceRecordSetsRecordTypes"
+      values = [
+        "TXT",
+      ]
+    }
+  }
+}
+
 data "aws_route53_zone" "private" {
   name         = var.private_zone_name
   private_zone = true
+}
+
+data "aws_route53_zone" "acme" {
+  name         = var.acme_zone_name
+  private_zone = false
 }
 
 data "aws_route_table" "public" {

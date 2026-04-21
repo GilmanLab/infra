@@ -28,6 +28,16 @@ output "security_group_id" {
   value       = aws_security_group.keycloak.id
 }
 
+output "acme_challenge_record_name" {
+  description = "Route 53 TXT record name Traefik may mutate for Keycloak ACME DNS-01 validation."
+  value       = local.acme_challenge_record_name
+}
+
+output "acme_zone_id" {
+  description = "Public Route 53 hosted zone ID used for Keycloak ACME DNS-01 validation."
+  value       = data.aws_route53_zone.acme.zone_id
+}
+
 output "ssm_parameter_names" {
   description = "SSM Parameter Store names where the host stores generated bootstrap credentials."
   value       = local.ssm_parameter_names

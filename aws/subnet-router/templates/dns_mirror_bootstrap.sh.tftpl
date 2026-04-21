@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+compose_arch="$(uname -m)"
+case "$${compose_arch}" in
+  x86_64) compose_arch="x86_64" ;;
+  aarch64) compose_arch="aarch64" ;;
+  *)
+    echo "unsupported architecture: $${compose_arch}" >&2
+    exit 1
+    ;;
+esac
+
+install -d -m 0755 /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.38.2/docker-compose-linux-$${compose_arch}" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
+
+docker compose version >/dev/null 2>&1
+
+install -d -m 0755 ${dns_mirror_runtime_dir}
+install -d -m 0755 ${dns_mirror_state_dir}
+
+cat >${dns_mirror_runtime_dir}/compose.yml <<'EOF'
+${dns_mirror_compose}
+EOF
+
+cat >/etc/systemd/system/dns-mirror.service <<'EOF'
+${dns_mirror_service_unit}
+EOF
+
+systemctl daemon-reload
+systemctl enable dns-mirror.service
+systemctl restart dns-mirror.service

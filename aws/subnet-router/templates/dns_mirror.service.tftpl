@@ -1,0 +1,15 @@
+[Unit]
+Description=dns-mirror compose stack
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${dns_mirror_runtime_dir}
+ExecStart=/usr/bin/docker compose -f ${dns_mirror_runtime_dir}/compose.yml up -d --pull always
+ExecStop=/usr/bin/docker compose -f ${dns_mirror_runtime_dir}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

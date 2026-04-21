@@ -1,0 +1,10 @@
+---
+coredns_image: docker.io/coredns/coredns:1.13.1
+coredns_service_ip: 10.10.10.54
+coredns_conf_path: /config/containers/coredns/Corefile
+coredns_zone_dir: /config/containers/coredns/zones
+coredns_zone_path: /config/containers/coredns/zones/glab.lol.zone
+
+dns_mirror_image: ghcr.io/gilmanlab/platform/services/dns-mirror:0.3.0
+dns_mirror_source_url: http://100.80.89.100:8080/zonefile
+dns_mirror_fetch_script_path: /config/scripts/dns-mirror-fetch-glab-lol.sh

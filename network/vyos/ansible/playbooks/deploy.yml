@@ -22,6 +22,7 @@
   hosts: vyos_gateway
   gather_facts: false
   vars_files:
+    - ../vars/coredns.yml
     - ../vars/powerdns.yml
     - ../vars/stepca.yml
     - ../vars/tailscale.yml
@@ -39,6 +40,9 @@
     remote_pdns_state_path: /config/containers/pdns-auth/desired-state.json
     remote_pdns_data_dir: /config/containers/pdns-auth/data
     remote_pdns_script_path: /config/scripts/pdns-reconcile.py
+    remote_coredns_conf_path: "{{ coredns_conf_path }}"
+    remote_coredns_zone_dir: "{{ coredns_zone_dir }}"
+    remote_dns_mirror_fetch_script_path: "{{ dns_mirror_fetch_script_path }}"
     remote_stepca_data_dir: /config/containers/stepca/data
     remote_stepca_certs_dir: /config/containers/stepca/data/certs
     remote_stepca_secrets_dir: /config/containers/stepca/data/secrets
@@ -81,6 +85,8 @@
     - name: Set local render paths
       ansible.builtin.set_fact:
         rendered_config_file: "{{ render_dir.path }}/gateway.conf"
+        rendered_coredns_corefile: "{{ render_dir.path }}/Corefile"
+        rendered_dns_mirror_fetch_script: "{{ render_dir.path }}/dns-mirror-fetch-glab-lol.sh"
         rendered_pdns_conf_file: "{{ render_dir.path }}/pdns.conf"
         rendered_pdns_state_file: "{{ render_dir.path }}/desired-state.json"
         rendered_stepca_ca_json_file: "{{ render_dir.path }}/ca.json"
@@ -241,6 +247,20 @@
         mode: "0600"
       no_log: true
 
+    - name: Render CoreDNS configuration
+      delegate_to: localhost
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/coredns.Corefile.j2"
+        dest: "{{ rendered_coredns_corefile }}"
+        mode: "0644"
+
+    - name: Render dns-mirror fetch script
+      delegate_to: localhost
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../templates/dns-mirror-fetch-glab-lol.sh.j2"
+        dest: "{{ rendered_dns_mirror_fetch_script }}"
+        mode: "0755"
+
     - name: Render step-ca ca.json
       delegate_to: localhost
       ansible.builtin.template:
@@ -281,6 +301,8 @@
               - "{{ rendered_config_file }}"
               - "{{ rendered_pdns_conf_file }}"
               - "{{ rendered_pdns_state_file }}"
+              - "{{ rendered_coredns_corefile }}"
+              - "{{ rendered_dns_mirror_fetch_script }}"
               - "{{ rendered_stepca_ca_json_file }}"
               - "{{ rendered_stepca_intermediate_key_file }}"
               - "{{ rendered_stepca_intermediate_pw_file }}"
@@ -326,6 +348,24 @@
                 sudo install -m 0600 {{ remote_stage_dir }}/desired-state.json {{ remote_pdns_state_path }} &&
                 sudo install -m 0750 {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_pdns_script_path }}
           no_log: true
+
+        - name: Install CoreDNS runtime assets on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                sudo install -d -m 0750 /config/containers/coredns /config/scripts &&
+                sudo install -d -m 0755 {{ remote_coredns_zone_dir }} &&
+                sudo install -m 0644 {{ remote_stage_dir }}/Corefile {{ remote_coredns_conf_path }} &&
+                sudo install -m 0755 {{ remote_stage_dir }}/dns-mirror-fetch-glab-lol.sh {{ remote_dns_mirror_fetch_script_path }}
 
         - name: Install step-ca runtime assets on router
           delegate_to: localhost
@@ -386,6 +426,38 @@
           register: stepca_image_pull
           changed_when: "'Downloaded' in stepca_image_pull.stdout or 'Copying blob' in stepca_image_pull.stdout or 'Writing manifest' in stepca_image_pull.stdout or 'Storing signatures' in stepca_image_pull.stdout"
 
+        - name: Pre-pull CoreDNS image on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman pull {{ coredns_image }}"
+          register: coredns_image_pull
+          changed_when: "'Downloaded' in coredns_image_pull.stdout or 'Copying blob' in coredns_image_pull.stdout or 'Writing manifest' in coredns_image_pull.stdout or 'Storing signatures' in coredns_image_pull.stdout"
+
+        - name: Pre-pull dns-mirror image on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman pull {{ dns_mirror_image }}"
+          register: dns_mirror_image_pull
+          changed_when: "'Downloaded' in dns_mirror_image_pull.stdout or 'Copying blob' in dns_mirror_image_pull.stdout or 'Writing manifest' in dns_mirror_image_pull.stdout or 'Storing signatures' in dns_mirror_image_pull.stdout"
+
         - name: Pre-pull Tailscale image on router
           delegate_to: localhost
           ansible.builtin.command:
@@ -401,6 +473,20 @@
               - "sudo podman pull {{ tailscale_image }}"
           register: tailscale_image_pull
           changed_when: "'Downloaded' in tailscale_image_pull.stdout or 'Copying blob' in tailscale_image_pull.stdout or 'Writing manifest' in tailscale_image_pull.stdout or 'Storing signatures' in tailscale_image_pull.stdout"
+
+        - name: Fetch initial glab.lol zonefile on router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo {{ remote_dns_mirror_fetch_script_path }}"
 
         - name: Load, commit, and save configuration
           vyos.vyos.vyos_command:
@@ -519,6 +605,42 @@
           until: tailscale_status.rc == 0 and tailscale_hostname in tailscale_status.stdout
           no_log: true
 
+        - name: Verify CoreDNS serves glab.lol directly
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - dig
+              - "+time=2"
+              - "+tries=1"
+              - "@{{ coredns_service_ip }}"
+              - glab.lol
+              - SOA
+          register: coredns_glab_lol
+          retries: 30
+          delay: 5
+          until:
+            - coredns_glab_lol.rc == 0
+            - "'status: NOERROR' in coredns_glab_lol.stdout"
+            - "'ANSWER: 1' in coredns_glab_lol.stdout"
+
+        - name: Verify VyOS forwards glab.lol to CoreDNS
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - dig
+              - "+time=2"
+              - "+tries=1"
+              - "@10.10.10.1"
+              - glab.lol
+              - SOA
+          register: vyos_glab_lol
+          retries: 30
+          delay: 5
+          until:
+            - vyos_glab_lol.rc == 0
+            - "'status: NOERROR' in vyos_glab_lol.stdout"
+            - "'ANSWER: 1' in vyos_glab_lol.stdout"
+
         - name: Verify Tailscale advertised routes
           ansible.builtin.assert:
             that:
@@ -542,7 +664,7 @@
               - -o
               - UserKnownHostsFile=/dev/null
               - "{{ ansible_user }}@{{ ansible_host }}"
-              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/ca.json {{ remote_stage_dir }}/intermediate_ca_key {{ remote_stage_dir }}/intermediate_ca_pw {{ remote_stage_dir }}/root_ca.crt {{ remote_stage_dir }}/intermediate_ca.crt"
+              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/Corefile {{ remote_stage_dir }}/dns-mirror-fetch-glab-lol.sh {{ remote_stage_dir }}/ca.json {{ remote_stage_dir }}/intermediate_ca_key {{ remote_stage_dir }}/intermediate_ca_pw {{ remote_stage_dir }}/root_ca.crt {{ remote_stage_dir }}/intermediate_ca.crt"
           ignore_errors: true
           no_log: true
 

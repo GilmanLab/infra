@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+podman run --rm \
+  --network host \
+  --volume {{ coredns_zone_dir }}:/zones \
+  {{ dns_mirror_image }} \
+  fetch \
+  --source-url {{ dns_mirror_source_url }} \
+  --output-path /zones/glab.lol.zone \
+  --timeout 15s
+
+chmod 0644 {{ coredns_zone_path }}

@@ -19,9 +19,27 @@ mock_provider "aws" {
     }
   }
 
+  mock_data "aws_route_table" {
+    defaults = {
+      id = "rtb-00000000"
+    }
+  }
+
   mock_data "aws_ssm_parameter" {
     defaults = {
       value = "ami-0000000000000000"
+    }
+  }
+
+  mock_data "aws_instance" {
+    defaults = {
+      id = "i-0000000000000000"
+    }
+  }
+
+  mock_data "aws_network_interface" {
+    defaults = {
+      id = "eni-00000000000000000"
     }
   }
 
@@ -76,6 +94,11 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.operator_tailscale_https) == 2
+    error_message = "The root module's operator_tailscale_cidrs should produce two HTTPS ingress rules."
+  }
+
+  assert {
     condition     = alltrue([for rule in aws_vpc_security_group_ingress_rule.keycloak_https : rule.cidr_ipv4 != "0.0.0.0/0" && rule.from_port == 443 && rule.to_port == 443 && rule.ip_protocol == "tcp"])
     error_message = "Keycloak ingress should expose only HTTPS to non-public lab CIDRs."
   }
@@ -89,9 +112,13 @@ run "plan_overrides" {
   }
 
   variables {
-    instance_name    = "glab-aws-keycloak-staging"
-    instance_type    = "t4g.medium"
-    lab_cidrs        = ["10.10.0.0/16", "10.20.0.0/16"]
+    instance_name = "glab-aws-keycloak-staging"
+    instance_type = "t4g.medium"
+    lab_cidrs     = ["10.10.0.0/16", "10.20.0.0/16"]
+    operator_tailscale_cidrs = {
+      laptop = "100.64.1.1/32"
+      studio = "100.64.1.2/32"
+    }
     private_hostname = "id.staging.glab.lol"
   }
 
@@ -103,6 +130,16 @@ run "plan_overrides" {
   assert {
     condition     = length(aws_vpc_security_group_ingress_rule.keycloak_https) == 2
     error_message = "Two lab CIDRs should produce two HTTPS ingress rules."
+  }
+
+  assert {
+    condition     = length(aws_vpc_security_group_ingress_rule.operator_tailscale_https) == 2
+    error_message = "Two operator Tailscale CIDRs should produce two HTTPS ingress rules."
+  }
+
+  assert {
+    condition     = length(aws_route.operator_tailscale) == 2
+    error_message = "Two operator Tailscale CIDRs should produce two return routes through the subnet router."
   }
 
   assert {
@@ -129,6 +166,24 @@ run "reject_invalid_lab_cidr" {
 
   expect_failures = [
     var.lab_cidrs,
+  ]
+}
+
+run "reject_invalid_operator_tailscale_cidr" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    operator_tailscale_cidrs = {
+      laptop = "not-a-cidr"
+    }
+  }
+
+  expect_failures = [
+    var.operator_tailscale_cidrs,
   ]
 }
 

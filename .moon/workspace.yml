@@ -1,5 +1,6 @@
 projects:
   sources:
+    aws-keycloak: 'aws/keycloak'
     aws-lab-foundation: 'aws/lab-foundation'
     aws-subnet-router: 'aws/subnet-router'
     root: '.'

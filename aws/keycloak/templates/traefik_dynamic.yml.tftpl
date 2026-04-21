@@ -1,8 +1,3 @@
-tls:
-  certificates:
-    - certFile: /etc/traefik/certs/${private_hostname}.crt
-      keyFile: /etc/traefik/certs/${private_hostname}.key
-
 http:
   routers:
     keycloak:
@@ -10,7 +5,8 @@ http:
       entryPoints:
         - websecure
       service: keycloak
-      tls: {}
+      tls:
+        certResolver: ${traefik_certificate_resolver}
 
   services:
     keycloak:

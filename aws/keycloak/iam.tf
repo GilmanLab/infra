@@ -13,6 +13,12 @@ resource "aws_iam_role_policy" "keycloak_bootstrap_parameters" {
   role   = aws_iam_role.keycloak.id
 }
 
+resource "aws_iam_role_policy" "keycloak_acme_route53" {
+  name   = "${var.iam_role_name}-acme-route53"
+  policy = data.aws_iam_policy_document.keycloak_acme_route53.json
+  role   = aws_iam_role.keycloak.id
+}
+
 resource "aws_iam_role_policy_attachment" "keycloak_ssm_managed_instance_core" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   role       = aws_iam_role.keycloak.name

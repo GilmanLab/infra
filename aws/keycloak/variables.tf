@@ -10,6 +10,39 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
+variable "acme_ca_server" {
+  description = "ACME directory URL used by Traefik for Let's Encrypt certificate issuance."
+  type        = string
+  default     = "https://acme-v02.api.letsencrypt.org/directory"
+
+  validation {
+    condition     = startswith(var.acme_ca_server, "https://")
+    error_message = "acme_ca_server must be an HTTPS URL."
+  }
+}
+
+variable "acme_email" {
+  description = "Email address used by Traefik when registering the Let's Encrypt ACME account."
+  type        = string
+  default     = "admin@glab.lol"
+
+  validation {
+    condition     = can(regex("^[^@[:space:]]+@[^@[:space:]]+$", var.acme_email))
+    error_message = "acme_email must be an email address."
+  }
+}
+
+variable "acme_zone_name" {
+  description = "Public Route 53 zone delegated from Cloudflare for ACME DNS-01 validation records."
+  type        = string
+  default     = "acme.glab.lol"
+
+  validation {
+    condition     = length(trimspace(var.acme_zone_name)) > 0
+    error_message = "acme_zone_name must not be empty."
+  }
+}
+
 variable "compose_version" {
   description = "Docker Compose CLI plugin version installed on the Keycloak host."
   type        = string
@@ -239,6 +272,12 @@ variable "traefik_image" {
   description = "Pinned Traefik container image."
   type        = string
   default     = "traefik:v3.6.13"
+}
+
+variable "traefik_dns_challenge_resolvers" {
+  description = "Comma-separated public recursive resolvers Traefik uses while checking DNS-01 propagation."
+  type        = string
+  default     = "1.1.1.1:53,8.8.8.8:53"
 }
 
 variable "vpc_name" {

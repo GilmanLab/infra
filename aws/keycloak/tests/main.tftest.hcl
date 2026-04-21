@@ -89,6 +89,26 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = local.acme_challenge_record_name == "_acme-challenge.id.acme.glab.lol"
+    error_message = "The default ACME challenge record should target the delegated Route 53 zone."
+  }
+
+  assert {
+    condition     = strcontains(local.compose, "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=route53")
+    error_message = "Traefik should use the Route 53 DNS-01 provider."
+  }
+
+  assert {
+    condition     = strcontains(local.compose, "AWS_HOSTED_ZONE_ID: Z00000000000000000")
+    error_message = "Traefik should receive the delegated Route 53 zone ID."
+  }
+
+  assert {
+    condition     = strcontains(local.traefik_dynamic_config, "certResolver: letsencrypt")
+    error_message = "The Keycloak router should request certificates through the Let's Encrypt resolver."
+  }
+
+  assert {
     condition     = length(aws_vpc_security_group_ingress_rule.keycloak_https) == 1
     error_message = "The default lab CIDRs should produce exactly one HTTPS ingress rule."
   }
@@ -150,6 +170,11 @@ run "plan_overrides" {
   assert {
     condition     = aws_route53_record.private.name == "id.staging.glab.lol"
     error_message = "The private hostname override should propagate to DNS."
+  }
+
+  assert {
+    condition     = local.acme_challenge_record_name == "_acme-challenge.id.staging.acme.glab.lol"
+    error_message = "The delegated ACME challenge record should follow the private hostname override."
   }
 }
 

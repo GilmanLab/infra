@@ -1,0 +1,19 @@
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/${private_hostname}.crt
+      keyFile: /etc/traefik/certs/${private_hostname}.key
+
+http:
+  routers:
+    keycloak:
+      rule: Host(`${private_hostname}`)
+      entryPoints:
+        - websecure
+      service: keycloak
+      tls: {}
+
+  services:
+    keycloak:
+      loadBalancer:
+        servers:
+          - url: http://keycloak:8080

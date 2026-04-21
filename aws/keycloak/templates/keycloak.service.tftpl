@@ -1,0 +1,15 @@
+[Unit]
+Description=Keycloak compose stack
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${keycloak_runtime_dir}
+ExecStart=/usr/bin/docker compose --env-file ${keycloak_runtime_dir}/stack.env -f ${keycloak_runtime_dir}/compose.yml up -d --pull always
+ExecStop=/usr/bin/docker compose --env-file ${keycloak_runtime_dir}/stack.env -f ${keycloak_runtime_dir}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

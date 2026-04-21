@@ -23,6 +23,5 @@ locals {
     dns_mirror_service_unit = local.dns_mirror_service_unit
     dns_mirror_state_dir    = var.dns_mirror_state_dir
   })
-  tailscale_advertise_routes_csv  = join(",", sort(tolist(var.tailscale_advertise_routes)))
-  tailscale_client_id_with_params = "${var.tailscale_client_id}?ephemeral=false&preauthorized=true"
+  tailscale_advertise_routes_csv = join(",", sort(tolist(var.tailscale_advertise_routes)))
 }

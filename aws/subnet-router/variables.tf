@@ -51,6 +51,12 @@ variable "dns_mirror_sync_interval" {
   default     = "1m"
 }
 
+variable "iam_role_name" {
+  description = "IAM role name used by the AWS subnet router instance."
+  type        = string
+  default     = "glab-aws-subnet-router"
+}
+
 variable "instance_name" {
   description = "Name tag for the AWS subnet router instance."
   type        = string
@@ -61,12 +67,6 @@ variable "instance_type" {
   description = "EC2 instance type for the AWS subnet router."
   type        = string
   default     = "t4g.nano"
-}
-
-variable "iam_role_name" {
-  description = "IAM role name used by the AWS subnet router instance."
-  type        = string
-  default     = "glab-aws-subnet-router"
 }
 
 variable "lab_cidrs" {

@@ -8,3 +8,4 @@ export TF_DATA_DIR
 tofu fmt -check -recursive
 tofu init -backend=false -input=false
 tofu validate
+tofu test

@@ -7,12 +7,16 @@ resource "aws_instance" "subnet_router" {
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
     tailscale_advertise_routes_csv  = local.tailscale_advertise_routes_csv
     tailscale_audience              = var.tailscale_audience
-    tailscale_client_id_with_params = local.tailscale_client_id_with_params
+    tailscale_client_id_with_params = "${var.tailscale_client_id}?ephemeral=false&preauthorized=true"
     tailscale_hostname              = var.instance_name
     tailscale_tag                   = var.tailscale_tag
   })
   user_data_replace_on_change = true
   vpc_security_group_ids      = [aws_security_group.subnet_router.id]
+
+  tags = merge(local.common_tags, {
+    Name = var.instance_name
+  })
 
   metadata_options {
     http_endpoint               = "enabled"
@@ -27,9 +31,9 @@ resource "aws_instance" "subnet_router" {
     volume_type           = "gp3"
   }
 
-  tags = merge(local.common_tags, {
-    Name = var.instance_name
-  })
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "subnet_router" {

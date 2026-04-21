@@ -1,5 +1,6 @@
 projects:
   sources:
+    aws-github-token-broker: 'aws/github-token-broker'
     aws-keycloak: 'aws/keycloak'
     aws-lab-foundation: 'aws/lab-foundation'
     aws-subnet-router: 'aws/subnet-router'

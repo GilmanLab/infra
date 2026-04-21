@@ -605,6 +605,21 @@
           until: tailscale_status.rc == 0 and tailscale_hostname in tailscale_status.stdout
           no_log: true
 
+        - name: Apply Tailscale site-to-site routing preferences
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - "sudo podman exec tailscale tailscale set --accept-routes --snat-subnet-routes=false"
+          changed_when: false
+
         - name: Verify CoreDNS serves glab.lol directly
           delegate_to: localhost
           ansible.builtin.command:

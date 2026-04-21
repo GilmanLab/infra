@@ -122,6 +122,17 @@ variable "lab_cidrs" {
   }
 }
 
+variable "operator_tailscale_cidrs" {
+  description = "Named operator Tailscale IPv4 CIDRs that may reach Keycloak directly over HTTPS."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for cidr in values(var.operator_tailscale_cidrs) : can(cidrnetmask(cidr))])
+    error_message = "Every entry in operator_tailscale_cidrs must be a valid IPv4 CIDR block."
+  }
+}
+
 variable "postgres_image" {
   description = "Pinned Postgres container image."
   type        = string
@@ -167,6 +178,12 @@ variable "public_subnet_name" {
   default     = "glab-lab-public"
 }
 
+variable "public_route_table_name" {
+  description = "Name tag used to discover the lab foundation public route table."
+  type        = string
+  default     = "glab-lab-public"
+}
+
 variable "root_volume_size" {
   description = "Size, in GiB, of the encrypted gp3 root volume attached to the Keycloak instance."
   type        = number
@@ -204,6 +221,12 @@ variable "ssm_parameter_prefix" {
     condition     = startswith(var.ssm_parameter_prefix, "/") && !endswith(var.ssm_parameter_prefix, "/")
     error_message = "ssm_parameter_prefix must start with '/' and must not end with '/'."
   }
+}
+
+variable "subnet_router_instance_name" {
+  description = "Name tag used to discover the AWS subnet router instance for operator Tailscale return routes."
+  type        = string
+  default     = "glab-aws-subnet-router"
 }
 
 variable "tags" {

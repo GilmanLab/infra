@@ -31,10 +31,29 @@ resource "aws_vpc_security_group_ingress_rule" "keycloak_https" {
   to_port           = 443
 }
 
+resource "aws_vpc_security_group_ingress_rule" "operator_tailscale_https" {
+  for_each = var.operator_tailscale_cidrs
+
+  cidr_ipv4         = each.value
+  description       = "Allow direct operator HTTPS traffic from ${each.key}."
+  from_port         = 443
+  ip_protocol       = "tcp"
+  security_group_id = aws_security_group.keycloak.id
+  to_port           = 443
+}
+
 resource "aws_route53_record" "private" {
   name    = var.private_hostname
   records = [aws_instance.keycloak.private_ip]
   ttl     = var.dns_record_ttl
   type    = "A"
   zone_id = data.aws_route53_zone.private.zone_id
+}
+
+resource "aws_route" "operator_tailscale" {
+  for_each = var.operator_tailscale_cidrs
+
+  destination_cidr_block = each.value
+  network_interface_id   = data.aws_network_interface.subnet_router.id
+  route_table_id         = data.aws_route_table.public.id
 }

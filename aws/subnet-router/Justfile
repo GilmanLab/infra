@@ -1,0 +1,29 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+default:
+    @just --list
+
+# Offline validation: no backend or AWS credentials required.
+check:
+    ./scripts/check.sh
+
+# Format Tofu files in place.
+fmt:
+    tofu fmt -recursive
+
+# Initialize the working directory against the S3 backend.
+init:
+    test -n "${GLAB_AWS_STATE_BUCKET:-}" || { echo "Set GLAB_AWS_STATE_BUCKET to the pre-created S3 backend bucket." >&2; exit 1; }
+    tofu init -reconfigure -backend-config="bucket=${GLAB_AWS_STATE_BUCKET}"
+
+# Render and save a plan to `tfplan`.
+plan:
+    tofu plan -out=tfplan
+
+# Apply the saved plan produced by `just plan`.
+apply:
+    tofu apply tfplan
+
+# Show outputs from the last applied state.
+output:
+    tofu output

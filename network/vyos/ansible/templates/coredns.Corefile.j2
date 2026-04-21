@@ -1,0 +1,8 @@
+glab.lol:53 {
+    bind {{ coredns_service_ip }}
+    errors
+    log
+    file /zones/glab.lol.zone glab.lol {
+        reload 30s
+    }
+}

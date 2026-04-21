@@ -1,0 +1,13 @@
+services:
+  dns-mirror:
+    image: ${dns_mirror_image}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      AWS_REGION: ${aws_region}
+      DNS_MIRROR_HOSTED_ZONE_ID: ${dns_mirror_hosted_zone_id}
+      DNS_MIRROR_OUTPUT_PATH: ${dns_mirror_output_path}
+      DNS_MIRROR_SYNC_INTERVAL: ${dns_mirror_sync_interval}
+      DNS_MIRROR_LISTEN_ADDR: ${dns_mirror_listen_addr}
+    volumes:
+      - ${dns_mirror_state_dir}:${dns_mirror_state_dir}

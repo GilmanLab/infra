@@ -1,5 +1,7 @@
 projects:
   sources:
+    aws-lab-foundation: 'aws/lab-foundation'
+    aws-subnet-router: 'aws/subnet-router'
     root: '.'
     network-vyos: 'network/vyos'
 

@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euxo pipefail
+
+cat >/etc/sysctl.d/99-tailscale.conf <<'EOF'
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1
+EOF
+
+sysctl -p /etc/sysctl.d/99-tailscale.conf
+
+curl -fsSL https://tailscale.com/install.sh | sh
+systemctl enable --now tailscaled
+
+for attempt in $(seq 1 30); do
+  if tailscale up \
+    --hostname='${tailscale_hostname}' \
+    --advertise-tags='${tailscale_tag}' \
+    --advertise-routes='${tailscale_advertise_routes_csv}' \
+    --snat-subnet-routes=false \
+    --accept-routes \
+    --accept-dns=false \
+    --client-id='${tailscale_client_id_with_params}' \
+    --audience='${tailscale_audience}'; then
+    exit 0
+  fi
+
+  sleep 10
+done
+
+journalctl -u tailscaled --no-pager || true
+exit 1

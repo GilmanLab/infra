@@ -24,7 +24,6 @@
   vars_files:
     - ../vars/coredns.yml
     - ../vars/powerdns.yml
-    - ../vars/stepca.yml
     - ../vars/tailscale.yml
 
   vars:
@@ -32,7 +31,6 @@
     config_file: "{{ playbook_dir }}/../../configs/gateway.conf"
     ssh_sops_file: "{{ secrets_dir }}/network/vyos/ssh.sops.yaml"
     pdns_sops_file: "{{ secrets_dir }}/network/vyos/dns/powerdns.sops.yaml"
-    stepca_sops_file: "{{ secrets_dir }}/network/vyos/pki/stepca.sops.yaml"
     tailscale_sops_file: "{{ secrets_dir }}/network/vyos/tailscale.sops.yaml"
     backup_dir: "{{ playbook_dir }}/../../backups"
     remote_config_path: /tmp/gateway.conf
@@ -43,12 +41,6 @@
     remote_coredns_conf_path: "{{ coredns_conf_path }}"
     remote_coredns_zone_dir: "{{ coredns_zone_dir }}"
     remote_dns_mirror_fetch_script_path: "{{ dns_mirror_fetch_script_path }}"
-    remote_stepca_data_dir: /config/containers/stepca/data
-    remote_stepca_certs_dir: /config/containers/stepca/data/certs
-    remote_stepca_secrets_dir: /config/containers/stepca/data/secrets
-    remote_stepca_config_dir: /config/containers/stepca/data/config
-    remote_stepca_db_dir: /config/containers/stepca/data/db
-    remote_stepca_legacy_password_path: /config/containers/stepca/init-password
     remote_stage_dir: /tmp
     tsig_secret_placeholder: "__VYOS_DHCP_TSIG_SECRET__"
     tailscale_authkey_placeholder: "__TAILSCALE_AUTHKEY__"
@@ -89,9 +81,6 @@
         rendered_dns_mirror_fetch_script: "{{ render_dir.path }}/dns-mirror-fetch-glab-lol.sh"
         rendered_pdns_conf_file: "{{ render_dir.path }}/pdns.conf"
         rendered_pdns_state_file: "{{ render_dir.path }}/desired-state.json"
-        rendered_stepca_ca_json_file: "{{ render_dir.path }}/ca.json"
-        rendered_stepca_intermediate_key_file: "{{ render_dir.path }}/intermediate_ca_key"
-        rendered_stepca_intermediate_pw_file: "{{ render_dir.path }}/intermediate_ca_pw"
 
     - name: Decrypt SSH credentials from SOPS
       delegate_to: localhost
@@ -127,34 +116,6 @@
       delegate_to: localhost
       ansible.builtin.set_fact:
         pdns_credentials: "{{ pdns_sops_output.stdout | from_yaml }}"
-      no_log: true
-
-    - name: Decrypt step-ca credentials from SOPS
-      delegate_to: localhost
-      ansible.builtin.command:
-        cmd: sops -d "{{ stepca_sops_file }}"
-      register: stepca_sops_output
-      changed_when: false
-      no_log: true
-
-    - name: Parse step-ca credentials
-      delegate_to: localhost
-      ansible.builtin.set_fact:
-        stepca_credentials: "{{ stepca_sops_output.stdout | from_yaml }}"
-      no_log: true
-
-    - name: Assert required step-ca SOPS keys are present
-      delegate_to: localhost
-      ansible.builtin.assert:
-        that:
-          - stepca_credentials.intermediate_key_pem is defined
-          - stepca_credentials.intermediate_key_password is defined
-          - stepca_credentials.jwk_public_jwk is defined
-          - stepca_credentials.jwk_encrypted_key is defined
-        fail_msg: >-
-          stepca.sops.yaml is missing one or more required router-shipped
-          keys (intermediate_key_pem, intermediate_key_password,
-          jwk_public_jwk, jwk_encrypted_key). Merge the secrets PR first.
       no_log: true
 
     - name: Decrypt Tailscale credentials from SOPS
@@ -261,30 +222,6 @@
         dest: "{{ rendered_dns_mirror_fetch_script }}"
         mode: "0755"
 
-    - name: Render step-ca ca.json
-      delegate_to: localhost
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../templates/ca.json.j2"
-        dest: "{{ rendered_stepca_ca_json_file }}"
-        mode: "0600"
-      no_log: true
-
-    - name: Write step-ca intermediate key to render dir
-      delegate_to: localhost
-      ansible.builtin.copy:
-        content: "{{ stepca_credentials.intermediate_key_pem }}"
-        dest: "{{ rendered_stepca_intermediate_key_file }}"
-        mode: "0600"
-      no_log: true
-
-    - name: Write step-ca intermediate key password to render dir
-      delegate_to: localhost
-      ansible.builtin.copy:
-        content: "{{ stepca_credentials.intermediate_key_password }}"
-        dest: "{{ rendered_stepca_intermediate_pw_file }}"
-        mode: "0600"
-      no_log: true
-
     - name: Stage runtime files on router
       block:
         - name: Copy configuration and runtime assets to router staging
@@ -303,12 +240,7 @@
               - "{{ rendered_pdns_state_file }}"
               - "{{ rendered_coredns_corefile }}"
               - "{{ rendered_dns_mirror_fetch_script }}"
-              - "{{ rendered_stepca_ca_json_file }}"
-              - "{{ rendered_stepca_intermediate_key_file }}"
-              - "{{ rendered_stepca_intermediate_pw_file }}"
               - "{{ pdns_reconcile_script_source }}"
-              - "{{ stepca_root_ca_cert_source }}"
-              - "{{ stepca_intermediate_ca_cert_source }}"
               - "{{ ansible_user }}@{{ ansible_host }}:{{ remote_stage_dir }}/"
           no_log: true
 
@@ -367,33 +299,6 @@
                 sudo install -m 0644 {{ remote_stage_dir }}/Corefile {{ remote_coredns_conf_path }} &&
                 sudo install -m 0755 {{ remote_stage_dir }}/dns-mirror-fetch-glab-lol.sh {{ remote_dns_mirror_fetch_script_path }}
 
-        - name: Install step-ca runtime assets on router
-          delegate_to: localhost
-          ansible.builtin.command:
-            argv:
-              - ssh
-              - -i
-              - "{{ ansible_ssh_private_key_file }}"
-              - -o
-              - StrictHostKeyChecking=no
-              - -o
-              - UserKnownHostsFile=/dev/null
-              - "{{ ansible_user }}@{{ ansible_host }}"
-              - >-
-                sudo install -d -m 0750 /config/containers/stepca &&
-                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_data_dir }} &&
-                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_certs_dir }} &&
-                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_secrets_dir }} &&
-                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_config_dir }} &&
-                sudo install -d -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0750 {{ remote_stepca_db_dir }} &&
-                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0444 {{ remote_stage_dir }}/root_ca.crt {{ remote_stepca_certs_dir }}/root_ca.crt &&
-                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0444 {{ remote_stage_dir }}/intermediate_ca.crt {{ remote_stepca_certs_dir }}/intermediate_ca.crt &&
-                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/intermediate_ca_key {{ remote_stepca_secrets_dir }}/intermediate_ca_key &&
-                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/intermediate_ca_pw {{ remote_stepca_secrets_dir }}/intermediate_ca_pw &&
-                sudo install -o {{ stepca_container_uid }} -g {{ stepca_container_gid }} -m 0400 {{ remote_stage_dir }}/ca.json {{ remote_stepca_config_dir }}/ca.json &&
-                sudo rm -f {{ remote_stepca_legacy_password_path }}
-          no_log: true
-
         - name: Pre-pull PowerDNS image on router
           delegate_to: localhost
           ansible.builtin.command:
@@ -409,22 +314,6 @@
               - "sudo podman pull {{ pdns_image }}"
           register: pdns_image_pull
           changed_when: "'Downloaded' in pdns_image_pull.stdout or 'Copying blob' in pdns_image_pull.stdout or 'Writing manifest' in pdns_image_pull.stdout or 'Storing signatures' in pdns_image_pull.stdout"
-
-        - name: Pre-pull step-ca image on router
-          delegate_to: localhost
-          ansible.builtin.command:
-            argv:
-              - ssh
-              - -i
-              - "{{ ansible_ssh_private_key_file }}"
-              - -o
-              - StrictHostKeyChecking=no
-              - -o
-              - UserKnownHostsFile=/dev/null
-              - "{{ ansible_user }}@{{ ansible_host }}"
-              - "sudo podman pull {{ stepca_image }}"
-          register: stepca_image_pull
-          changed_when: "'Downloaded' in stepca_image_pull.stdout or 'Copying blob' in stepca_image_pull.stdout or 'Writing manifest' in stepca_image_pull.stdout or 'Storing signatures' in stepca_image_pull.stdout"
 
         - name: Pre-pull CoreDNS image on router
           delegate_to: localhost
@@ -504,6 +393,27 @@
             delay: 5
             timeout: 90
 
+        - name: Remove stale step-ca runtime data from router
+          delegate_to: localhost
+          ansible.builtin.command:
+            argv:
+              - ssh
+              - -i
+              - "{{ ansible_ssh_private_key_file }}"
+              - -o
+              - StrictHostKeyChecking=no
+              - -o
+              - UserKnownHostsFile=/dev/null
+              - "{{ ansible_user }}@{{ ansible_host }}"
+              - >-
+                sudo rm -rf /config/containers/stepca
+                {{ remote_stage_dir }}/ca.json
+                {{ remote_stage_dir }}/intermediate_ca_key
+                {{ remote_stage_dir }}/intermediate_ca_pw
+                {{ remote_stage_dir }}/root_ca.crt
+                {{ remote_stage_dir }}/intermediate_ca.crt
+          changed_when: false
+
         - name: Wait for PowerDNS API to become healthy
           delegate_to: localhost
           ansible.builtin.command:
@@ -542,49 +452,6 @@
                 PDNS_API_URL={{ pdns_api_url | quote }}
                 python3 {{ remote_pdns_script_path }} {{ remote_pdns_state_path }}
           no_log: true
-
-        - name: Wait for step-ca health endpoint
-          delegate_to: localhost
-          ansible.builtin.command:
-            argv:
-              - ssh
-              - -i
-              - "{{ ansible_ssh_private_key_file }}"
-              - -o
-              - StrictHostKeyChecking=no
-              - -o
-              - UserKnownHostsFile=/dev/null
-              - "{{ ansible_user }}@{{ ansible_host }}"
-              - "curl -fsS -k {{ stepca_health_url }}"
-          register: stepca_health
-          retries: 30
-          delay: 5
-          until: stepca_health.rc == 0
-
-        - name: Fetch step-ca roots.pem for chain verification
-          delegate_to: localhost
-          ansible.builtin.command:
-            argv:
-              - ssh
-              - -i
-              - "{{ ansible_ssh_private_key_file }}"
-              - -o
-              - StrictHostKeyChecking=no
-              - -o
-              - UserKnownHostsFile=/dev/null
-              - "{{ ansible_user }}@{{ ansible_host }}"
-              - "curl -fsS -k https://{{ stepca_service_ip }}:{{ stepca_port }}/roots.pem | openssl x509 -noout -subject -issuer"
-          register: stepca_roots_pem
-          changed_when: false
-
-        - name: Verify step-ca is serving the KMS-rooted chain
-          ansible.builtin.assert:
-            that:
-              - "'glab Root CA' in stepca_roots_pem.stdout"
-            fail_msg: >-
-              step-ca is serving an unexpected root certificate. Expected
-              subject 'glab Root CA' but got: {{ stepca_roots_pem.stdout }}.
-              Deployment may be pointing at stale bootstrap material.
 
         - name: Wait for Tailscale subnet router to become ready
           delegate_to: localhost
@@ -679,7 +546,7 @@
               - -o
               - UserKnownHostsFile=/dev/null
               - "{{ ansible_user }}@{{ ansible_host }}"
-              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/Corefile {{ remote_stage_dir }}/dns-mirror-fetch-glab-lol.sh {{ remote_stage_dir }}/ca.json {{ remote_stage_dir }}/intermediate_ca_key {{ remote_stage_dir }}/intermediate_ca_pw {{ remote_stage_dir }}/root_ca.crt {{ remote_stage_dir }}/intermediate_ca.crt"
+              - "rm -f {{ remote_config_path }} {{ remote_stage_dir }}/pdns.conf {{ remote_stage_dir }}/desired-state.json {{ remote_stage_dir }}/pdns-reconcile.py {{ remote_stage_dir }}/Corefile {{ remote_stage_dir }}/dns-mirror-fetch-glab-lol.sh"
           ignore_errors: true
           no_log: true
 

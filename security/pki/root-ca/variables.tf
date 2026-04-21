@@ -1,3 +1,9 @@
+variable "aws_account_id" {
+  description = "AWS account ID where the root CA KMS key is created."
+  type        = string
+  default     = "186067932323"
+}
+
 variable "aws_region" {
   description = "AWS region in which the root CA KMS key is created."
   type        = string
@@ -10,7 +16,7 @@ variable "key_alias" {
 }
 
 variable "key_spec" {
-  description = "KMS customer_master_key_spec for the root CA key. Must be a SIGN_VERIFY-capable asymmetric spec supported by step-ca's awskms key manager."
+  description = "KMS customer_master_key_spec for the root CA key. Must be a SIGN_VERIFY-capable asymmetric key spec."
   type        = string
   default     = "ECC_NIST_P384"
 }

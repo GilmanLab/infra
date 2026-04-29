@@ -16,7 +16,8 @@ project:
 tasks:
   check:
     command: >-
-      bash -lc "proto exec cue -- cue vet -c . -t host=um760 &&
+      bash -lc "proto install --quiet cue 0.16.1 &&
+      proto exec cue -- cue vet -c . -t host=um760 &&
       proto exec cue -- cue export . -e kubernetesObjects --out yaml -t host=um760 >/dev/null &&
       proto exec cue -- cue export . -e kubernetesYAML --out text -t host=um760 >/dev/null &&
       proto exec cue -- cue export . -e imageBuildConfig --out json -t host=um760 >/dev/null &&

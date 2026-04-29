@@ -1,0 +1,39 @@
+layer: 'application'
+tags:
+  - 'compute'
+  - 'incusos'
+  - 'tinkerbell'
+  - 'cue'
+  - 'python'
+
+project:
+  title: 'IncusOS bootstrap inputs'
+  description: 'CUE-backed IncusOS operation image and Tinkerbell bootstrap inputs for the lab.'
+  owner: 'GilmanLab'
+  maintainers:
+    - 'josh'
+
+tasks:
+  check:
+    command: >-
+      bash -lc "proto run cue -- vet -c . -t host=um760 &&
+      proto run cue -- export . -e kubernetesObjects --out yaml -t host=um760 >/dev/null &&
+      proto run cue -- export . -e kubernetesYAML --out text -t host=um760 >/dev/null &&
+      proto run cue -- export . -e imageBuildConfig --out json -t host=um760 >/dev/null &&
+      if proto run cue -- export . -e kubernetesYAML --out text -t host=ms02-1 >/dev/null 2>&1; then
+        echo 'expected joiner export to fail' >&2;
+        exit 1;
+      fi &&
+      python3 -m py_compile scripts/imagectl.py"
+    toolchains: 'system'
+    inputs:
+      - '/.prototools'
+      - '/.moon/toolchains.yml'
+      - '.gitignore'
+      - 'Justfile'
+      - 'README.md'
+      - '*.cue'
+      - 'scripts/imagectl.py'
+    options:
+      cache: false
+      runInCI: true

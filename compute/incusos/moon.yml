@@ -16,12 +16,11 @@ project:
 tasks:
   check:
     command: >-
-      bash -lc "proto install --quiet cue 0.16.1 &&
-      proto exec cue -- cue vet -c . -t host=um760 &&
-      proto exec cue -- cue export . -e kubernetesObjects --out yaml -t host=um760 >/dev/null &&
-      proto exec cue -- cue export . -e kubernetesYAML --out text -t host=um760 >/dev/null &&
-      proto exec cue -- cue export . -e imageBuildConfig --out json -t host=um760 >/dev/null &&
-      if proto exec cue -- cue export . -e kubernetesYAML --out text -t host=ms02-1 >/dev/null 2>&1; then
+      bash -lc "cue vet -c . -t host=um760 &&
+      cue export . -e kubernetesObjects --out yaml -t host=um760 >/dev/null &&
+      cue export . -e kubernetesYAML --out text -t host=um760 >/dev/null &&
+      cue export . -e imageBuildConfig --out json -t host=um760 >/dev/null &&
+      if cue export . -e kubernetesYAML --out text -t host=ms02-1 >/dev/null 2>&1; then
         echo 'expected joiner export to fail' >&2;
         exit 1;
       fi &&

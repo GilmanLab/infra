@@ -28,6 +28,7 @@ tasks:
     toolchains: 'system'
     inputs:
       - '/.prototools'
+      - '/.moon/proto/cue.toml'
       - '/.moon/toolchains.yml'
       - '.gitignore'
       - 'Justfile'

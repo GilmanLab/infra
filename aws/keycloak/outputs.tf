@@ -8,6 +8,26 @@ output "iam_role_arn" {
   value       = aws_iam_role.keycloak.arn
 }
 
+output "github_token_broker_function_arn" {
+  description = "ARN of the GitHub token broker Lambda deployed for Keycloak bootstrap access."
+  value       = module.github_token_broker.function_arn
+}
+
+output "github_token_broker_function_name" {
+  description = "Name of the GitHub token broker Lambda deployed for Keycloak bootstrap access."
+  value       = module.github_token_broker.function_name
+}
+
+output "github_token_broker_log_group_name" {
+  description = "CloudWatch log group for the GitHub token broker Lambda."
+  value       = module.github_token_broker.log_group_name
+}
+
+output "github_token_broker_release_version" {
+  description = "GitHub token broker release version deployed by this stack."
+  value       = module.github_token_broker.deployed_version
+}
+
 output "instance_id" {
   description = "EC2 instance ID of the Keycloak host."
   value       = aws_instance.keycloak.id

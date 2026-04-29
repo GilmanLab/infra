@@ -7,9 +7,28 @@ mock_provider "aws" {
     }
   }
 
+  mock_data "aws_partition" {
+    defaults = {
+      partition = "aws"
+    }
+  }
+
+  mock_data "aws_region" {
+    defaults = {
+      name = "us-west-2"
+    }
+  }
+
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
+
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:role/mock-role"
+      id  = "mock-role"
     }
   }
 
@@ -122,6 +141,21 @@ run "plan_defaults" {
     condition     = alltrue([for rule in aws_vpc_security_group_ingress_rule.keycloak_https : rule.cidr_ipv4 != "0.0.0.0/0" && rule.from_port == 443 && rule.to_port == 443 && rule.ip_protocol == "tcp"])
     error_message = "Keycloak ingress should expose only HTTPS to non-public lab CIDRs."
   }
+
+  assert {
+    condition     = module.github_token_broker.function_name == "glab-github-token-broker"
+    error_message = "The Keycloak stack should deploy the shared GitHub token broker name."
+  }
+
+  assert {
+    condition     = module.github_token_broker.deployed_version == "v1.1.0"
+    error_message = "The Keycloak stack should pin the current broker release."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.keycloak_github_token_broker_invoke.role == aws_iam_role.keycloak.id
+    error_message = "The Keycloak instance role should be allowed to invoke the token broker."
+  }
 }
 
 run "plan_overrides" {
@@ -132,9 +166,10 @@ run "plan_overrides" {
   }
 
   variables {
-    instance_name = "glab-aws-keycloak-staging"
-    instance_type = "t4g.medium"
-    lab_cidrs     = ["10.10.0.0/16", "10.20.0.0/16"]
+    instance_name                     = "glab-aws-keycloak-staging"
+    instance_type                     = "t4g.medium"
+    github_token_broker_function_name = "glab-keycloak-staging-github-token-broker"
+    lab_cidrs                         = ["10.10.0.0/16", "10.20.0.0/16"]
     operator_tailscale_cidrs = {
       laptop = "100.64.1.1/32"
       studio = "100.64.1.2/32"
@@ -175,6 +210,11 @@ run "plan_overrides" {
   assert {
     condition     = local.acme_challenge_record_name == "_acme-challenge.id.staging.acme.glab.lol"
     error_message = "The delegated ACME challenge record should follow the private hostname override."
+  }
+
+  assert {
+    condition     = module.github_token_broker.function_name == "glab-keycloak-staging-github-token-broker"
+    error_message = "The broker function name override should propagate."
   }
 }
 

@@ -10,6 +10,9 @@ This stack creates:
 - a security group that exposes HTTPS only to lab CIDRs
 - a private Route 53 `A` record for `id.glab.lol`
 - scoped Route 53 permissions for ACME DNS-01 validation in `acme.glab.lol`
+- a GitHub token broker Lambda, sourced from
+  `meigma/github-token-broker`, for short-lived `GilmanLab/secrets` access
+- Keycloak instance-role permission to invoke the token broker
 - an SSM-driven Docker Compose deployment for Postgres, Keycloak, and Traefik
 
 This stack intentionally stops at starting Keycloak. It does **not** configure
@@ -29,12 +32,36 @@ the delegated TXT record for this hostname.
 - `GLAB_AWS_STATE_BUCKET` set to the pre-created S3 backend bucket in the
   `lab` account
 - the `aws/lab-foundation` and `aws/subnet-router` stacks already applied
+- the GitHub App SSM parameters created outside Terraform:
+  `/glab/bootstrap/github-app/client-id`,
+  `/glab/bootstrap/github-app/installation-id`, and
+  `/glab/bootstrap/github-app/private-key-pem`
+- `gh` and `sha256sum` on the apply host so the broker module can download and
+  verify the pinned release asset
 - Cloudflare delegates `acme.glab.lol` to the `aws/lab-foundation`
   `acme_zone_name_servers` output and sets
   `_acme-challenge.id.glab.lol` as a CNAME to
   `_acme-challenge.id.acme.glab.lol`
 
 The expected local operator flow is to export both values via `direnv`.
+
+## Legacy token broker cleanup
+
+The old `aws/github-token-broker` stack used the same default Lambda name,
+`glab-github-token-broker`, and was originally published from
+`GilmanLab/platform`. Do not apply both stacks at the same time.
+
+If the old Lambda is still active, retire it before applying this stack:
+
+```sh
+cd ../github-token-broker
+just init
+tofu destroy
+```
+
+Then apply `aws/keycloak`. This preserves one live owner for the broker
+resources and lets Keycloak's stack recreate the Lambda from the current
+`meigma/github-token-broker` release.
 
 ## Usage
 

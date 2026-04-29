@@ -4,31 +4,31 @@ default:
 
 # Export the selected host's manifest stream for inspection.
 export host="um760":
-    @proto exec cue -- cue export . -e kubernetesYAML --out text -t host={{host}}
+    @proto run cue -- export . -e kubernetesYAML --out text -t host={{host}}
 
 # Validate the declarative package for the supported first-node flow.
 vet:
-    @proto exec cue -- cue vet -c . -t host=um760
+    @proto run cue -- vet -c . -t host=um760
 
 # Build the seeded IncusOS operation image locally.
 image-build host="um760":
-    @proto exec cue -- cue export . -e imageBuildConfig --out json -t host={{host}} | uv run scripts/imagectl.py build
+    @proto run cue -- export . -e imageBuildConfig --out json -t host={{host}} | uv run scripts/imagectl.py build
 
 # Copy the built image to the VyOS artifact directory served on LAB_PROV.
 image-stage-vyos host="um760":
-    @proto exec cue -- cue export . -e imageBuildConfig --out json -t host={{host}} | uv run scripts/imagectl.py stage-vyos
+    @proto run cue -- export . -e imageBuildConfig --out json -t host={{host}} | uv run scripts/imagectl.py stage-vyos
 
 # Server-side dry-run the selected host's manifest stream.
 dry-run host="um760":
-    @proto exec cue -- cue export . -e kubernetesYAML --out text -t host={{host}} | kubectl apply --dry-run=server -f -
+    @proto run cue -- export . -e kubernetesYAML --out text -t host={{host}} | kubectl apply --dry-run=server -f -
 
 # Apply the selected host's manifest stream to the bootstrap cluster.
 apply host="um760":
-    @proto exec cue -- cue export . -e kubernetesYAML --out text -t host={{host}} | kubectl apply -f -
+    @proto run cue -- export . -e kubernetesYAML --out text -t host={{host}} | kubectl apply -f -
 
 # Delete the selected host's manifest stream from the bootstrap cluster.
 delete host="um760":
-    @proto exec cue -- cue export . -e kubernetesYAML --out text -t host={{host}} | kubectl delete --ignore-not-found=true -f -
+    @proto run cue -- export . -e kubernetesYAML --out text -t host={{host}} | kubectl delete --ignore-not-found=true -f -
 
 # Remove disposable local build state.
 clean:

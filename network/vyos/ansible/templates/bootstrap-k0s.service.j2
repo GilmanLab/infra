@@ -1,0 +1,16 @@
+[Unit]
+Description=GilmanLab bootstrap k0s management plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=-/usr/bin/podman rm -f bootstrap-k0s
+ExecStart=/usr/bin/podman run --name bootstrap-k0s --pull=never --privileged --network host --tmpfs /run -v {{ bootstrap_k0s_data_dir }}:/var/lib/k0s -v {{ bootstrap_k0s_pods_dir }}:/var/log/pods --env-file {{ bootstrap_k0s_env_path }} {{ bootstrap_k0s_image }}
+ExecStop=/usr/bin/podman stop -t 20 bootstrap-k0s
+ExecStopPost=-/usr/bin/podman rm -f bootstrap-k0s
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,7 @@ projects:
     aws-keycloak: 'aws/keycloak'
     aws-lab-foundation: 'aws/lab-foundation'
     aws-subnet-router: 'aws/subnet-router'
+    compute-incusos: 'compute/incusos'
     root: '.'
     network-vyos: 'network/vyos'
 

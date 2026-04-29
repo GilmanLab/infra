@@ -1,0 +1,4 @@
+cue = "=0.16.1"
+
+[plugins.tools]
+cue = "file://.moon/proto/cue.toml"

@@ -31,6 +31,7 @@ moon run network-vyos:check
 
 - `aws/lab-foundation`: OpenTofu for the base VPC, DNS, and KMS primitives in the lab AWS account
 - `aws/subnet-router`: OpenTofu for the AWS EC2 subnet router that joins Tailscale using AWS workload identity federation
+- `compute/incusos`: declarative IncusOS operation image and Tinkerbell bootstrap inputs
 - `network/tailscale`: Tailscale DNS settings managed via OpenTofu
 - `network/vyos`: VyOS gateway automation, config, and static validation
 - `security/pki/root-ca`: OpenTofu for the offline-by-policy root CA KMS key

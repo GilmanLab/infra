@@ -26,7 +26,7 @@ tasks:
     toolchains: 'system'
     inputs:
       - 'ansible.cfg'
-      - 'ansible/**/*.yml'
+      - 'ansible/**/*'
       - 'configs/gateway.conf'
     options:
       cache: false

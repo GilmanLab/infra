@@ -1,0 +1,24 @@
+layer: 'application'
+tags:
+  - 'aws'
+  - 'tofu'
+
+project:
+  title: 'AWS Keycloak Flatcar Spike'
+  description: 'Temporary OpenTofu stack for proving Flatcar Keycloak bootstrap with labctl.'
+  owner: 'GilmanLab'
+  maintainers:
+    - 'josh'
+
+tasks:
+  check:
+    command: './scripts/check.sh'
+    toolchains: 'system'
+    inputs:
+      - '*.tf'
+      - '.terraform.lock.hcl'
+      - 'scripts/check.sh'
+      - 'tests/**/*.tftest.hcl'
+    options:
+      cache: false
+      runInCI: true

@@ -1,9 +1,10 @@
 resource "aws_instance" "keycloak" {
-  ami                         = data.aws_ssm_parameter.al2023_arm64.value
+  ami                         = var.flatcar_ami_id
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.keycloak.name
   instance_type               = var.instance_type
   subnet_id                   = data.aws_subnet.public.id
+  user_data                   = local.ignition_config
   user_data_replace_on_change = true
   vpc_security_group_ids      = [aws_security_group.keycloak.id]
 
@@ -23,4 +24,21 @@ resource "aws_instance" "keycloak" {
   tags = merge(local.common_tags, {
     Name = var.instance_name
   })
+}
+
+resource "aws_ebs_volume" "keycloak_data" {
+  availability_zone = data.aws_subnet.public.availability_zone
+  encrypted         = true
+  size              = var.data_volume_size
+  type              = "gp3"
+
+  tags = merge(local.common_tags, {
+    Name = "${var.instance_name}-data"
+  })
+}
+
+resource "aws_volume_attachment" "keycloak_data" {
+  device_name = var.data_volume_device_name
+  instance_id = aws_instance.keycloak.id
+  volume_id   = aws_ebs_volume.keycloak_data.id
 }

@@ -1,5 +1,3 @@
-data "aws_caller_identity" "current" {}
-
 data "aws_iam_policy_document" "keycloak_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -11,16 +9,31 @@ data "aws_iam_policy_document" "keycloak_assume_role" {
   }
 }
 
-data "aws_iam_policy_document" "keycloak_bootstrap_parameters" {
+data "aws_iam_policy_document" "keycloak_sops_decrypt" {
   statement {
-    sid = "AllowReadWriteKeycloakBootstrapParameters"
+    sid = "AllowDecryptKeycloakSopsSecrets"
     actions = [
-      "ssm:GetParameter",
-      "ssm:PutParameter",
+      "kms:Decrypt",
     ]
     resources = [
-      local.ssm_parameter_path_arn,
+      var.sops_kms_key_arn,
     ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:Repo"
+      values = [
+        var.sops_kms_context_repo,
+      ]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:Scope"
+      values = [
+        var.sops_kms_context_scope,
+      ]
+    }
   }
 }
 
@@ -100,10 +113,6 @@ data "aws_route_table" "public" {
     name   = "vpc-id"
     values = [data.aws_vpc.lab.id]
   }
-}
-
-data "aws_ssm_parameter" "al2023_arm64" {
-  name = var.ami_ssm_parameter_name
 }
 
 data "aws_instance" "subnet_router" {

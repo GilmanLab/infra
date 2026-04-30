@@ -105,6 +105,103 @@ variable "instance_type" {
   default     = "t4g.small"
 }
 
+variable "github_token_broker_function_name" {
+  description = "Name of the GitHub token broker Lambda deployed with the Keycloak stack."
+  type        = string
+  default     = "glab-github-token-broker"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_-]{1,64}$", var.github_token_broker_function_name))
+    error_message = "github_token_broker_function_name must be 1-64 characters and contain only letters, numbers, hyphens, and underscores."
+  }
+}
+
+variable "github_token_broker_log_retention_days" {
+  description = "CloudWatch log retention, in days, for the GitHub token broker Lambda log group."
+  type        = number
+  default     = 30
+
+  validation {
+    condition = contains(
+      [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 2192, 2557, 2922, 3288, 3653, 0],
+      var.github_token_broker_log_retention_days,
+    )
+    error_message = "github_token_broker_log_retention_days must be one of the values accepted by CloudWatch Logs, or 0 for never expire."
+  }
+}
+
+variable "github_token_broker_permissions" {
+  description = "GitHub App installation token permissions requested by the broker."
+  type        = map(string)
+  default     = { contents = "read" }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.github_token_broker_permissions : length(trimspace(k)) > 0 && length(trimspace(v)) > 0
+    ])
+    error_message = "github_token_broker_permissions entries must have non-empty keys and values."
+  }
+}
+
+variable "github_token_broker_private_key_kms_key_arn" {
+  description = "Optional customer-managed KMS key or alias ARN used by SSM to encrypt the GitHub App private key parameter."
+  type        = string
+  default     = null
+
+  validation {
+    condition = (
+      var.github_token_broker_private_key_kms_key_arn == null ||
+      can(regex("^arn:aws[a-zA-Z-]*:kms:[a-z0-9-]+:[0-9]{12}:(key/[A-Za-z0-9-]+|alias/[A-Za-z0-9/_-]+)$", var.github_token_broker_private_key_kms_key_arn))
+    )
+    error_message = "github_token_broker_private_key_kms_key_arn must be a literal KMS key or alias ARN without wildcard characters."
+  }
+}
+
+variable "github_token_broker_release_repository" {
+  description = "OWNER/REPO GitHub repository that publishes the GitHub token broker release asset."
+  type        = string
+  default     = "meigma/github-token-broker"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_token_broker_release_repository))
+    error_message = "github_token_broker_release_repository must be a literal OWNER/REPO value."
+  }
+}
+
+variable "github_token_broker_release_version" {
+  description = "Release tag of meigma/github-token-broker to deploy."
+  type        = string
+  default     = "v2.0.0"
+
+  validation {
+    condition     = can(regex("^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$", var.github_token_broker_release_version))
+    error_message = "github_token_broker_release_version must be a semver tag such as v2.0.0."
+  }
+}
+
+variable "github_token_broker_ssm_parameter_paths" {
+  description = "SSM parameter paths holding the GitHub App credentials used by the broker."
+  type = object({
+    client_id       = string
+    installation_id = string
+    private_key     = string
+  })
+  default = {
+    client_id       = "/glab/bootstrap/github-app/client-id"
+    installation_id = "/glab/bootstrap/github-app/installation-id"
+    private_key     = "/glab/bootstrap/github-app/private-key-pem"
+  }
+
+  validation {
+    condition = alltrue([
+      can(regex("^/[A-Za-z0-9_.\\-/]+$", var.github_token_broker_ssm_parameter_paths.client_id)),
+      can(regex("^/[A-Za-z0-9_.\\-/]+$", var.github_token_broker_ssm_parameter_paths.installation_id)),
+      can(regex("^/[A-Za-z0-9_.\\-/]+$", var.github_token_broker_ssm_parameter_paths.private_key)),
+    ])
+    error_message = "github_token_broker_ssm_parameter_paths entries must be absolute literal SSM paths."
+  }
+}
+
 variable "keycloak_admin_username" {
   description = "Temporary bootstrap admin username passed to Keycloak on first startup."
   type        = string

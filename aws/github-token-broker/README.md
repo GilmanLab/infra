@@ -1,5 +1,12 @@
 # aws/github-token-broker
 
+> Deprecated: the GitHub token broker is now owned by `aws/keycloak` through
+> the reusable `meigma/github-token-broker` Terraform module. Keep this stack
+> only long enough to destroy the legacy `glab-github-token-broker` resources
+> in AWS before applying `aws/keycloak`. The legacy state may also own the lab
+> GitHub Actions OIDC provider; do not run a full destroy unless you have
+> confirmed that provider is not shared.
+
 OpenTofu stack for the GitHub token broker Lambda in the `lab` account.
 
 This stack creates:

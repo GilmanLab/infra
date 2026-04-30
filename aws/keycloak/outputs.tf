@@ -48,6 +48,27 @@ output "security_group_id" {
   value       = aws_security_group.keycloak.id
 }
 
+output "data_volume_id" {
+  description = "Encrypted EBS volume ID mounted at /var/lib/keycloak."
+  value       = aws_ebs_volume.keycloak_data.id
+}
+
+output "bootstrap_unit_name" {
+  description = "Systemd unit that fetches Keycloak bootstrap secrets."
+  value       = local.bootstrap_unit_name
+}
+
+output "service_unit_names" {
+  description = "Systemd units that run the Flatcar Keycloak stack."
+  value = {
+    data     = local.data_unit_name
+    network  = local.network_unit_name
+    postgres = local.postgres_unit_name
+    keycloak = local.keycloak_unit_name
+    traefik  = local.traefik_unit_name
+  }
+}
+
 output "acme_challenge_record_name" {
   description = "Route 53 TXT record name Traefik may mutate for Keycloak ACME DNS-01 validation."
   value       = local.acme_challenge_record_name
@@ -56,9 +77,4 @@ output "acme_challenge_record_name" {
 output "acme_zone_id" {
   description = "Public Route 53 hosted zone ID used for Keycloak ACME DNS-01 validation."
   value       = data.aws_route53_zone.acme.zone_id
-}
-
-output "ssm_parameter_names" {
-  description = "SSM Parameter Store names where the host stores generated bootstrap credentials."
-  value       = local.ssm_parameter_names
 }

@@ -1,9 +1,3 @@
-variable "ami_ssm_parameter_name" {
-  description = "SSM public parameter that resolves to the latest Amazon Linux 2023 arm64 AMI."
-  type        = string
-  default     = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
-}
-
 variable "aws_region" {
   description = "AWS region in which the Keycloak instance is created."
   type        = string
@@ -43,36 +37,91 @@ variable "acme_zone_name" {
   }
 }
 
-variable "compose_version" {
-  description = "Docker Compose CLI plugin version installed on the Keycloak host."
+variable "bootstrap_field" {
+  description = "RFC 6901 field path extracted from the SOPS file by labctl."
   type        = string
-  default     = "v2.38.2"
+  default     = "/stack_env"
 
   validation {
-    condition     = startswith(var.compose_version, "v")
-    error_message = "compose_version must include the leading 'v' used by Docker Compose release tags."
+    condition     = startswith(var.bootstrap_field, "/")
+    error_message = "bootstrap_field must be an RFC 6901 pointer beginning with '/'."
   }
 }
 
-variable "database_name" {
-  description = "Postgres database name used by Keycloak."
+variable "bootstrap_output_path" {
+  description = "Path where labctl writes the decrypted dotenv payload on the Flatcar host."
   type        = string
-  default     = "keycloak"
+  default     = "/run/glab/keycloak/stack.env"
 
   validation {
-    condition     = can(regex("^[a-zA-Z_][a-zA-Z0-9_]*$", var.database_name))
-    error_message = "database_name must be a valid Postgres identifier."
+    condition     = startswith(var.bootstrap_output_path, "/run/")
+    error_message = "bootstrap_output_path must stay under /run."
   }
 }
 
-variable "database_username" {
-  description = "Postgres user name used by Keycloak."
+variable "bootstrap_runtime_dir" {
+  description = "Ephemeral host directory mounted into the labctl container."
   type        = string
-  default     = "keycloak"
+  default     = "/run/glab/keycloak"
 
   validation {
-    condition     = can(regex("^[a-zA-Z_][a-zA-Z0-9_]*$", var.database_username))
-    error_message = "database_username must be a valid Postgres identifier."
+    condition     = startswith(var.bootstrap_runtime_dir, "/run/") && !endswith(var.bootstrap_runtime_dir, "/")
+    error_message = "bootstrap_runtime_dir must stay under /run and must not end with '/'."
+  }
+}
+
+variable "bootstrap_secret_path" {
+  description = "Path to the SOPS-encrypted Keycloak bootstrap secret in GilmanLab/secrets."
+  type        = string
+  default     = "services/keycloak/bootstrap.sops.yaml"
+
+  validation {
+    condition     = can(regex("^services/keycloak/[^[:space:]]+\\.sops\\.yaml$", var.bootstrap_secret_path))
+    error_message = "bootstrap_secret_path must point at a services/keycloak/*.sops.yaml file."
+  }
+}
+
+variable "data_dir" {
+  description = "Mount point for the encrypted Keycloak data volume."
+  type        = string
+  default     = "/var/lib/keycloak"
+
+  validation {
+    condition     = startswith(var.data_dir, "/") && !endswith(var.data_dir, "/")
+    error_message = "data_dir must be an absolute path and must not end with '/'."
+  }
+}
+
+variable "data_volume_label" {
+  description = "Filesystem label assigned to the Keycloak data volume when first formatted."
+  type        = string
+  default     = "keycloak-data"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]{1,16}$", var.data_volume_label))
+    error_message = "data_volume_label must be 1-16 filesystem-label-safe characters."
+  }
+}
+
+variable "data_volume_size" {
+  description = "Size, in GiB, of the encrypted gp3 data volume mounted at data_dir."
+  type        = number
+  default     = 8
+
+  validation {
+    condition     = var.data_volume_size >= 8 && var.data_volume_size <= 1024
+    error_message = "data_volume_size must be between 8 and 1024 GiB."
+  }
+}
+
+variable "data_volume_device_name" {
+  description = "Requested EC2 device name for the Keycloak data volume attachment."
+  type        = string
+  default     = "/dev/xvdf"
+
+  validation {
+    condition     = startswith(var.data_volume_device_name, "/dev/")
+    error_message = "data_volume_device_name must be an absolute /dev path."
   }
 }
 
@@ -87,22 +136,15 @@ variable "dns_record_ttl" {
   }
 }
 
-variable "iam_role_name" {
-  description = "IAM role name used by the Keycloak instance."
+variable "flatcar_ami_id" {
+  description = "Flatcar stable arm64 AMI ID for us-west-2. Recheck the official Flatcar AWS EC2 table before live apply."
   type        = string
-  default     = "glab-aws-keycloak"
-}
+  default     = "ami-0ce605082061bbb10"
 
-variable "instance_name" {
-  description = "Name tag for the Keycloak EC2 instance."
-  type        = string
-  default     = "glab-aws-keycloak"
-}
-
-variable "instance_type" {
-  description = "EC2 instance type for the Keycloak host."
-  type        = string
-  default     = "t4g.small"
+  validation {
+    condition     = can(regex("^ami-[0-9a-f]{17}$", var.flatcar_ami_id))
+    error_message = "flatcar_ami_id must be a literal EC2 AMI ID."
+  }
 }
 
 variable "github_token_broker_function_name" {
@@ -202,37 +244,22 @@ variable "github_token_broker_ssm_parameter_paths" {
   }
 }
 
-variable "keycloak_admin_username" {
-  description = "Temporary bootstrap admin username passed to Keycloak on first startup."
+variable "iam_role_name" {
+  description = "IAM role name used by the Keycloak instance."
   type        = string
-  default     = "admin"
-
-  validation {
-    condition     = length(trimspace(var.keycloak_admin_username)) > 0
-    error_message = "keycloak_admin_username must not be empty."
-  }
+  default     = "glab-aws-keycloak"
 }
 
-variable "keycloak_heap_max" {
-  description = "Maximum JVM heap assigned to Keycloak."
+variable "instance_name" {
+  description = "Name tag for the Keycloak EC2 instance."
   type        = string
-  default     = "768m"
-
-  validation {
-    condition     = can(regex("^[0-9]+[mMgG]$", var.keycloak_heap_max))
-    error_message = "keycloak_heap_max must use a JVM memory suffix such as 768m or 1g."
-  }
+  default     = "glab-aws-keycloak"
 }
 
-variable "keycloak_heap_min" {
-  description = "Initial JVM heap assigned to Keycloak."
+variable "instance_type" {
+  description = "EC2 instance type for the Keycloak host."
   type        = string
-  default     = "256m"
-
-  validation {
-    condition     = can(regex("^[0-9]+[mMgG]$", var.keycloak_heap_min))
-    error_message = "keycloak_heap_min must use a JVM memory suffix such as 256m or 1g."
-  }
+  default     = "t4g.small"
 }
 
 variable "keycloak_image" {
@@ -252,6 +279,17 @@ variable "lab_cidrs" {
   }
 }
 
+variable "labctl_image" {
+  description = "Pinned labctl container image used for the bootstrap secret fetch."
+  type        = string
+  default     = "ghcr.io/gilmanlab/platform/labctl@sha256:4638b36a168df88d4206d5ff23aed62a6d8459ba7a2481c0b7c65c696445c1ec"
+
+  validation {
+    condition     = startswith(var.labctl_image, "ghcr.io/gilmanlab/platform/labctl@sha256:")
+    error_message = "labctl_image must be pinned by digest."
+  }
+}
+
 variable "operator_tailscale_cidrs" {
   description = "Named operator Tailscale IPv4 CIDRs that may reach Keycloak directly over HTTPS."
   type        = map(string)
@@ -267,17 +305,6 @@ variable "postgres_image" {
   description = "Pinned Postgres container image."
   type        = string
   default     = "postgres:18.3-trixie"
-}
-
-variable "postgres_state_dir" {
-  description = "Host path mounted into the Postgres container for durable database state."
-  type        = string
-  default     = "/var/lib/keycloak/postgres"
-
-  validation {
-    condition     = startswith(var.postgres_state_dir, "/")
-    error_message = "postgres_state_dir must be an absolute path."
-  }
 }
 
 variable "private_hostname" {
@@ -320,19 +347,19 @@ variable "root_volume_size" {
   default     = 16
 
   validation {
-    condition     = var.root_volume_size >= 8 && var.root_volume_size <= 100
-    error_message = "root_volume_size must be between 8 and 100 GiB."
+    condition     = var.root_volume_size >= 13 && var.root_volume_size <= 100
+    error_message = "root_volume_size must be between 13 and 100 GiB for the current Flatcar AMI snapshot."
   }
 }
 
 variable "runtime_dir" {
-  description = "Host path that stores the Keycloak Compose stack and generated TLS material."
+  description = "Root-backed host path that stores non-secret Keycloak and Traefik runtime config."
   type        = string
-  default     = "/opt/keycloak"
+  default     = "/etc/glab/keycloak"
 
   validation {
-    condition     = startswith(var.runtime_dir, "/")
-    error_message = "runtime_dir must be an absolute path."
+    condition     = startswith(var.runtime_dir, "/") && !endswith(var.runtime_dir, "/")
+    error_message = "runtime_dir must be an absolute path and must not end with '/'."
   }
 }
 
@@ -342,14 +369,26 @@ variable "security_group_name" {
   default     = "glab-aws-keycloak"
 }
 
-variable "ssm_parameter_prefix" {
-  description = "SSM Parameter Store path prefix where the host stores generated bootstrap credentials."
+variable "sops_kms_context_repo" {
+  description = "KMS encryption context Repo value allowed for Keycloak SOPS decrypts."
   type        = string
-  default     = "/glab/keycloak"
+  default     = "GilmanLab/secrets"
+}
+
+variable "sops_kms_context_scope" {
+  description = "KMS encryption context Scope value allowed for Keycloak SOPS decrypts."
+  type        = string
+  default     = "keycloak"
+}
+
+variable "sops_kms_key_arn" {
+  description = "Customer-managed KMS key used by the secrets repository SOPS rules."
+  type        = string
+  default     = "arn:aws:kms:us-west-2:186067932323:key/2aba1d94-6eaf-4d80-8d26-2077f32fd7c5"
 
   validation {
-    condition     = startswith(var.ssm_parameter_prefix, "/") && !endswith(var.ssm_parameter_prefix, "/")
-    error_message = "ssm_parameter_prefix must start with '/' and must not end with '/'."
+    condition     = can(regex("^arn:aws[a-zA-Z-]*:kms:[a-z0-9-]+:[0-9]{12}:key/[A-Za-z0-9-]+$", var.sops_kms_key_arn))
+    error_message = "sops_kms_key_arn must be a literal KMS key ARN."
   }
 }
 

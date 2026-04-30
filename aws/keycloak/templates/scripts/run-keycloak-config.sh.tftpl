@@ -45,6 +45,7 @@ done
 /usr/bin/docker run --rm \
   --name keycloak-config-cli \
   --network keycloak \
+  --user 0:0 \
   --env-file '${config_output_path}' \
   -e KEYCLOAK_URL='http://keycloak:8080' \
   -e KEYCLOAK_USER="$KC_BOOTSTRAP_ADMIN_USERNAME" \

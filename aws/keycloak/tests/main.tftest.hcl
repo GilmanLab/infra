@@ -142,6 +142,11 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = strcontains(local.run_config_script, "--name keycloak-config-cli") && strcontains(local.run_config_script, "--user 0:0")
+    error_message = "The config-cli container should run as root so it can read root-owned generated config files."
+  }
+
+  assert {
     condition     = strcontains(local.lab_realm_config, "\"realm\": \"lab\"") && strcontains(local.lab_realm_config, "\"webAuthnPolicyRpId\": \"id.glab.lol\"") && strcontains(local.lab_realm_config, "\"webAuthnPolicyUserVerificationRequirement\": \"discouraged\"")
     error_message = "The realm config should define the lab realm with touch-only WebAuthn policy for id.glab.lol."
   }

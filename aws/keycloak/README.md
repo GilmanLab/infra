@@ -13,9 +13,9 @@ This stack creates:
 - a GitHub token broker Lambda, sourced from `meigma/github-token-broker`, for short-lived `GilmanLab/secrets` access
 - Keycloak instance-role permission to invoke the token broker
 - Keycloak instance-role permission to decrypt only SOPS secrets with `Repo=GilmanLab/secrets` and `Scope=keycloak`
-- Ignition-managed systemd units for Postgres, Keycloak, Traefik, bootstrap secret fetches, and first-boot realm configuration
+- Ignition-managed systemd units for Postgres, Keycloak, Traefik, bootstrap secret fetches, and realm configuration
 
-This stack configures only the initial `lab` realm and one local admin account with password plus WebAuthn/YubiKey enrollment. It does **not** configure GitHub OIDC, service clients, backups, Synology sync, Kubernetes OIDC, Argo CD, Grafana, or IAM Identity Center federation.
+This stack configures the `lab` realm, one local admin account with password plus WebAuthn/YubiKey enrollment, and a minimal public OIDC client for Incus. It does **not** configure GitHub OIDC, OpenFGA, backups, Synology sync, Kubernetes OIDC, Argo CD, Grafana, or IAM Identity Center federation.
 
 Traefik obtains the `id.glab.lol` certificate from Let's Encrypt through DNS-01. Cloudflare delegates `_acme-challenge.id.glab.lol` to the public Route 53 `acme.glab.lol` zone, and the Keycloak instance role may mutate only the delegated TXT record for this hostname.
 
@@ -36,13 +36,24 @@ secrets get services/keycloak/bootstrap.sops.yaml \
 
 Plaintext bootstrap material is written only under `/run/glab/keycloak`. The persistent data volume stores Postgres state in `/var/lib/keycloak/postgres` and ACME state in `/var/lib/keycloak/acme`; the Postgres directory is owned by the container's Postgres UID.
 
-`glab-keycloak-config.service` runs once after Keycloak is healthy. It fetches
+`glab-keycloak-config.service` runs after Keycloak is healthy. It renders the
+realm config, compares its SHA-256 hash with
+`/var/lib/keycloak/config/lab-realm.sha256`, and skips when the stored hash
+matches. When the hash changes, it fetches
 `services/keycloak/admin.sops.yaml` through the same broker-backed `labctl`
 path, writes `/run/glab/keycloak/admin.env`, then runs pinned
 `keycloak-config-cli` to create the `lab` realm, local admin user, and
-touch-only WebAuthn policy. The service writes
-`/var/lib/keycloak/config/lab-realm-imported` after a successful import so it
-does not run again on reboot.
+touch-only WebAuthn policy. It also creates the public `incus` OIDC client with
+OAuth 2.0 Device Authorization Grant enabled. The service writes the new
+realm-config hash only after a successful import.
+
+The follow-up Incus-side OIDC values are:
+
+- `oidc.issuer = https://id.glab.lol/realms/lab`
+- `oidc.client.id = incus`
+- `oidc.scopes = openid,email,profile`
+- `oidc.claim = preferred_username` if validation confirms that Keycloak emits
+  it in the Incus access token
 
 After enrolling and validating the admin YubiKey in the browser, disable the
 temporary master bootstrap admin manually:

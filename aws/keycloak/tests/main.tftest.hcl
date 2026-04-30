@@ -137,6 +137,16 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = strcontains(local.run_config_script, "sha256sum '/run/glab/keycloak/lab-realm.json'") && strcontains(local.run_config_script, "cat '/var/lib/keycloak/config/lab-realm.sha256'") && strcontains(local.run_config_script, "printf '%s\\n' \"$desired_hash\" >'/var/lib/keycloak/config/lab-realm.sha256'")
+    error_message = "The config script should use a rendered realm hash marker instead of a permanent first-import marker."
+  }
+
+  assert {
+    condition     = !strcontains(local.config_unit, "ConditionPathExists")
+    error_message = "The config unit should run on boot and let the config script decide whether the realm config changed."
+  }
+
+  assert {
     condition     = strcontains(local.run_config_script, "quay.io/adorsys/keycloak-config-cli@sha256:2d2a0663cf324379d9ffab896db8d00293cd0326151968b319cf166f6eec8fca")
     error_message = "The config script should use the pinned keycloak-config-cli image digest."
   }
@@ -154,6 +164,16 @@ run "plan_defaults" {
   assert {
     condition     = strcontains(local.lab_realm_config, "\"username\": \"$(env:KEYCLOAK_LOCAL_ADMIN_USERNAME)\"") && strcontains(local.lab_realm_config, "\"value\": \"$(env:KEYCLOAK_LOCAL_ADMIN_PASSWORD)\"") && strcontains(local.lab_realm_config, "\"webauthn-register\"")
     error_message = "The realm config should create the local admin from runtime env and require WebAuthn registration."
+  }
+
+  assert {
+    condition     = strcontains(local.lab_realm_config, "\"clientId\": \"incus\"") && strcontains(local.lab_realm_config, "\"publicClient\": true") && strcontains(local.lab_realm_config, "\"oauth2.device.authorization.grant.enabled\": \"true\"")
+    error_message = "The realm config should define a public Incus OIDC client with device authorization enabled."
+  }
+
+  assert {
+    condition     = strcontains(local.lab_realm_config, "\"standardFlowEnabled\": false") && strcontains(local.lab_realm_config, "\"implicitFlowEnabled\": false") && strcontains(local.lab_realm_config, "\"directAccessGrantsEnabled\": false") && strcontains(local.lab_realm_config, "\"serviceAccountsEnabled\": false") && strcontains(local.lab_realm_config, "\"authorizationServicesEnabled\": false")
+    error_message = "The Incus client should keep unused OIDC grants and authorization services disabled."
   }
 
   assert {

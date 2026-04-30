@@ -14,7 +14,7 @@ locals {
   keycloak_env_path             = "${var.bootstrap_runtime_dir}/keycloak.env"
   helper_script_dir             = "${var.runtime_dir}/bin"
   keycloak_config_dir           = "${var.data_dir}/config"
-  keycloak_config_marker_path   = "${local.keycloak_config_dir}/lab-realm-imported"
+  keycloak_config_marker_path   = "${local.keycloak_config_dir}/lab-realm.sha256"
   keycloak_realm_config_path    = "${var.bootstrap_runtime_dir}/lab-realm.json"
   data_volume_device_path       = "/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${replace(aws_ebs_volume.keycloak_data.id, "-", "")}"
 

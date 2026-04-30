@@ -3,14 +3,23 @@ set -eu
 
 . '${bootstrap_output_path}'
 
-if [ -f '${keycloak_config_marker_path}' ]; then
-  echo 'Keycloak lab realm configuration already imported.'
-  exit 0
-fi
-
 mkdir -p '${bootstrap_runtime_dir}' '${keycloak_config_dir}'
 chmod 0700 '${bootstrap_runtime_dir}'
 rm -f '${config_output_path}' '${keycloak_realm_config_path}' '${keycloak_realm_config_path}.gz.b64'
+
+cat >'${keycloak_realm_config_path}.gz.b64' <<'EOF_REALM_CONFIG'
+${lab_realm_config_gzip_base64}
+EOF_REALM_CONFIG
+/usr/bin/base64 -d '${keycloak_realm_config_path}.gz.b64' | /usr/bin/gzip -d >'${keycloak_realm_config_path}'
+chmod 0600 '${keycloak_realm_config_path}'
+rm -f '${keycloak_realm_config_path}.gz.b64'
+
+desired_hash="$(/usr/bin/sha256sum '${keycloak_realm_config_path}' | /usr/bin/awk '{print $1}')"
+if [ -f '${keycloak_config_marker_path}' ] && [ "$(cat '${keycloak_config_marker_path}')" = "$desired_hash" ]; then
+  echo "Keycloak lab realm configuration already at $desired_hash."
+  rm -f '${keycloak_realm_config_path}'
+  exit 0
+fi
 
 /usr/bin/docker run --rm \
   --network host \
@@ -24,13 +33,6 @@ rm -f '${config_output_path}' '${keycloak_realm_config_path}' '${keycloak_realm_
   --aws-region '${aws_region}' \
   --broker-function '${github_token_broker_function_name}'
 chmod 0600 '${config_output_path}'
-
-cat >'${keycloak_realm_config_path}.gz.b64' <<'EOF_REALM_CONFIG'
-${lab_realm_config_gzip_base64}
-EOF_REALM_CONFIG
-/usr/bin/base64 -d '${keycloak_realm_config_path}.gz.b64' | /usr/bin/gzip -d >'${keycloak_realm_config_path}'
-chmod 0600 '${keycloak_realm_config_path}'
-rm -f '${keycloak_realm_config_path}.gz.b64'
 
 deadline=$(( $(date +%s) + 300 ))
 until /usr/bin/curl -fsS http://127.0.0.1:9000/health/ready >/dev/null; do
@@ -59,5 +61,6 @@ done
   -v '${keycloak_realm_config_path}:/config/lab-realm.json:ro' \
   '${keycloak_config_cli_image}'
 
-touch '${keycloak_config_marker_path}'
+printf '%s\n' "$desired_hash" >'${keycloak_config_marker_path}'
 chmod 0600 '${keycloak_config_marker_path}'
+rm -f '${keycloak_realm_config_path}'

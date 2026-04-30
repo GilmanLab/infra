@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+. '${bootstrap_output_path}'
+
+deadline=$(( $(date +%s) + 300 ))
+until /usr/bin/curl -fsS http://127.0.0.1:9000/health/ready >/dev/null; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo 'Timed out waiting for Keycloak readiness.' >&2
+    exit 1
+  fi
+  sleep 5
+done
+
+/usr/bin/docker run --rm \
+  --network keycloak \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME="$KC_BOOTSTRAP_ADMIN_USERNAME" \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD" \
+  --entrypoint /bin/sh \
+  '${keycloak_image}' \
+  -c 'set -eu
+    /opt/keycloak/bin/kcadm.sh config credentials \
+      --server http://keycloak:8080 \
+      --realm master \
+      --user "$KC_BOOTSTRAP_ADMIN_USERNAME" \
+      --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" >/dev/null
+
+    user_id="$(
+      /opt/keycloak/bin/kcadm.sh get users \
+        -r master \
+        -q username="$KC_BOOTSTRAP_ADMIN_USERNAME" \
+        --fields id \
+        --format csv \
+        --noquotes |
+      {
+        line=
+        IFS= read -r line || true
+        if [ "$line" = "id" ]; then
+          IFS= read -r line || true
+        fi
+        printf "%s" "$line"
+      }
+    )"
+    if [ -z "$user_id" ]; then
+      echo "Could not find bootstrap admin user." >&2
+      exit 1
+    fi
+
+    /opt/keycloak/bin/kcadm.sh update "users/$user_id" -r master -s enabled=false
+  '

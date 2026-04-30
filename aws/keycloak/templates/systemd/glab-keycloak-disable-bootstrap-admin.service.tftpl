@@ -1,0 +1,9 @@
+[Unit]
+Description=Disable temporary Keycloak master bootstrap admin
+Requires=docker.service ${network_unit_name} ${bootstrap_unit_name} ${keycloak_unit_name}
+After=docker.service ${network_unit_name} ${bootstrap_unit_name} ${keycloak_unit_name}
+ConditionPathExists=${keycloak_config_marker_path}
+
+[Service]
+Type=oneshot
+ExecStart=${helper_script_dir}/disable-bootstrap-admin.sh

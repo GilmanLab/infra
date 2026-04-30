@@ -81,6 +81,39 @@ variable "bootstrap_secret_path" {
   }
 }
 
+variable "config_field" {
+  description = "RFC 6901 field path extracted from the SOPS file by labctl for Keycloak realm configuration."
+  type        = string
+  default     = "/admin_env"
+
+  validation {
+    condition     = startswith(var.config_field, "/")
+    error_message = "config_field must be an RFC 6901 pointer beginning with '/'."
+  }
+}
+
+variable "config_output_path" {
+  description = "Path where labctl writes the decrypted Keycloak realm configuration dotenv payload."
+  type        = string
+  default     = "/run/glab/keycloak/admin.env"
+
+  validation {
+    condition     = startswith(var.config_output_path, "/run/")
+    error_message = "config_output_path must stay under /run."
+  }
+}
+
+variable "config_secret_path" {
+  description = "Path to the SOPS-encrypted Keycloak realm configuration secret in GilmanLab/secrets."
+  type        = string
+  default     = "services/keycloak/admin.sops.yaml"
+
+  validation {
+    condition     = can(regex("^services/keycloak/[^[:space:]]+\\.sops\\.yaml$", var.config_secret_path))
+    error_message = "config_secret_path must point at a services/keycloak/*.sops.yaml file."
+  }
+}
+
 variable "data_dir" {
   description = "Mount point for the encrypted Keycloak data volume."
   type        = string
@@ -266,6 +299,17 @@ variable "keycloak_image" {
   description = "Pinned Keycloak container image."
   type        = string
   default     = "quay.io/keycloak/keycloak:26.6.1"
+}
+
+variable "keycloak_config_cli_image" {
+  description = "Pinned keycloak-config-cli container image used for first-boot realm configuration."
+  type        = string
+  default     = "quay.io/adorsys/keycloak-config-cli@sha256:2d2a0663cf324379d9ffab896db8d00293cd0326151968b319cf166f6eec8fca"
+
+  validation {
+    condition     = startswith(var.keycloak_config_cli_image, "quay.io/adorsys/keycloak-config-cli@sha256:")
+    error_message = "keycloak_config_cli_image must be pinned by digest."
+  }
 }
 
 variable "lab_cidrs" {

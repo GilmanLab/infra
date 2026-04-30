@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+/usr/bin/docker rm -f keycloak-postgres >/dev/null 2>&1 || true
+exec /usr/bin/docker run \
+  --name keycloak-postgres \
+  --network keycloak \
+  --network-alias postgres \
+  --env-file '${bootstrap_output_path}' \
+  --env PGDATA=/var/lib/postgresql/data \
+  --volume '${postgres_state_dir}:/var/lib/postgresql' \
+  --health-cmd 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  --health-interval 10s \
+  --health-timeout 5s \
+  --health-retries 12 \
+  --pull always \
+  '${postgres_image}'

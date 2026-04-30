@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+/usr/bin/docker rm -f keycloak-traefik >/dev/null 2>&1 || true
+exec /usr/bin/docker run \
+  --name keycloak-traefik \
+  --network keycloak \
+  --env AWS_REGION='${aws_region}' \
+  --env AWS_HOSTED_ZONE_ID='${traefik_zone_id}' \
+  --publish 443:443 \
+  --volume '${traefik_acme_storage_host_dir}:/etc/traefik/acme' \
+  --volume '${runtime_dir}/traefik_dynamic.yml:/etc/traefik/dynamic.yml:ro' \
+  --pull always \
+  '${traefik_image}' \
+  --entrypoints.websecure.address=:443 \
+  --certificatesresolvers.${traefik_certificate_resolver}.acme.email='${acme_email}' \
+  --certificatesresolvers.${traefik_certificate_resolver}.acme.storage='${traefik_acme_storage_file}' \
+  --certificatesresolvers.${traefik_certificate_resolver}.acme.caserver='${acme_ca_server}' \
+  --certificatesresolvers.${traefik_certificate_resolver}.acme.dnschallenge.provider=route53 \
+  --certificatesresolvers.${traefik_certificate_resolver}.acme.dnschallenge.resolvers='${traefik_dns_challenge_resolvers}' \
+  --providers.file.filename=/etc/traefik/dynamic.yml \
+  --providers.file.watch=true \
+  --api.dashboard=false \
+  --log.level=INFO

@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+dev='${data_volume_device_path}'
+i=0
+while [ ! -e "$dev" ] && [ "$i" -lt 90 ]; do
+  i=$((i + 1))
+  sleep 2
+done
+
+if [ ! -e "$dev" ]; then
+  echo "data volume $dev did not appear" >&2
+  exit 1
+fi
+
+if ! blkid "$dev" >/dev/null 2>&1; then
+  mkfs.ext4 -F -L '${data_volume_label}' "$dev"
+fi
+
+mkdir -p '${data_dir}'
+if ! findmnt -rn '${data_dir}' >/dev/null 2>&1; then
+  mount "$dev" '${data_dir}'
+fi
+
+mkdir -p '${postgres_state_dir}' '${traefik_acme_storage_host_dir}'
+chown 999:999 '${postgres_state_dir}'
+chmod 0750 '${data_dir}'
+chmod 0700 '${postgres_state_dir}'
+chmod 0700 '${traefik_acme_storage_host_dir}'
+touch '${traefik_acme_storage_host_dir}/acme.json'
+chmod 0600 '${traefik_acme_storage_host_dir}/acme.json'

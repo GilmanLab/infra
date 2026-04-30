@@ -1,0 +1,12 @@
+[Unit]
+Description=Configure Keycloak lab realm
+Requires=docker.service ${data_unit_name} ${network_unit_name} ${bootstrap_unit_name} ${keycloak_unit_name}
+After=docker.service ${data_unit_name} ${network_unit_name} ${bootstrap_unit_name} ${keycloak_unit_name}
+ConditionPathExists=!${keycloak_config_marker_path}
+
+[Service]
+Type=oneshot
+ExecStart=${helper_script_dir}/run-keycloak-config.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -107,12 +107,12 @@ run "plan_defaults" {
   }
 
   assert {
-    condition     = strcontains(local.ignition_config, "\"version\":\"3.3.0\"")
-    error_message = "The Keycloak host should pass raw Ignition v3 JSON as EC2 user data."
+    condition     = strcontains(local.ignition_config, "\"compression\":\"gzip\"") && strcontains(local.ignition_config, "data:application/vnd.coreos.ignition+json;base64,")
+    error_message = "The Keycloak host should pass a compressed Ignition v3 config through EC2 user data."
   }
 
   assert {
-    condition     = strcontains(local.ignition_config, "amazon-ssm-agent.service")
+    condition     = strcontains(local.ignition_payload_config, "amazon-ssm-agent.service")
     error_message = "The Keycloak host should enable the Flatcar AWS SSM agent."
   }
 
@@ -132,13 +132,48 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = strcontains(local.run_config_script, "secrets get 'services/keycloak/admin.sops.yaml'") && strcontains(local.run_config_script, "--field '/admin_env'") && strcontains(local.run_config_script, "--output '/run/glab/keycloak/admin.env'")
+    error_message = "The config script should fetch only the Keycloak admin_env field into /run."
+  }
+
+  assert {
+    condition     = strcontains(local.run_config_script, "quay.io/adorsys/keycloak-config-cli@sha256:2d2a0663cf324379d9ffab896db8d00293cd0326151968b319cf166f6eec8fca")
+    error_message = "The config script should use the pinned keycloak-config-cli image digest."
+  }
+
+  assert {
+    condition     = strcontains(local.run_config_script, "--name keycloak-config-cli") && strcontains(local.run_config_script, "--user 0:0")
+    error_message = "The config-cli container should run as root so it can read root-owned generated config files."
+  }
+
+  assert {
+    condition     = strcontains(local.lab_realm_config, "\"realm\": \"lab\"") && strcontains(local.lab_realm_config, "\"webAuthnPolicyRpId\": \"id.glab.lol\"") && strcontains(local.lab_realm_config, "\"webAuthnPolicyUserVerificationRequirement\": \"discouraged\"")
+    error_message = "The realm config should define the lab realm with touch-only WebAuthn policy for id.glab.lol."
+  }
+
+  assert {
+    condition     = strcontains(local.lab_realm_config, "\"username\": \"$(env:KEYCLOAK_LOCAL_ADMIN_USERNAME)\"") && strcontains(local.lab_realm_config, "\"value\": \"$(env:KEYCLOAK_LOCAL_ADMIN_PASSWORD)\"") && strcontains(local.lab_realm_config, "\"webauthn-register\"")
+    error_message = "The realm config should create the local admin from runtime env and require WebAuthn registration."
+  }
+
+  assert {
     condition     = strcontains(local.prepare_data_script, "/var/lib/keycloak/postgres") && strcontains(local.prepare_data_script, "/var/lib/keycloak/acme") && strcontains(local.prepare_data_script, "chown 999:999")
     error_message = "The data preparation script should place Postgres and ACME state on the data volume."
   }
 
   assert {
-    condition     = strcontains(local.ignition_config, "/etc/glab/keycloak/bin/run-keycloak.sh") && !strcontains(local.ignition_config, "/usr/local/lib/glab-keycloak")
+    condition     = strcontains(local.ignition_payload_config, "/etc/glab/keycloak/bin/run-keycloak.sh") && !strcontains(local.ignition_payload_config, "/usr/local/lib/glab-keycloak")
     error_message = "Ignition should write helper scripts under writable root-backed config paths, not Flatcar's read-only /usr tree."
+  }
+
+  assert {
+    condition     = strcontains(local.ignition_payload_config, "/etc/glab/keycloak/bin/run-keycloak-config.sh") && strcontains(local.ignition_payload_config, "glab-keycloak-config.service")
+    error_message = "Ignition should install and enable the first-boot Keycloak config service."
+  }
+
+  assert {
+    condition     = strcontains(local.ignition_payload_config, "/etc/glab/keycloak/bin/disable-bootstrap-admin.sh") && strcontains(local.ignition_payload_config, "glab-keycloak-disable-bootstrap-admin.service")
+    error_message = "Ignition should install the manual bootstrap admin disable service."
   }
 
   assert {
@@ -269,6 +304,11 @@ run "plan_overrides" {
   }
 
   assert {
+    condition     = strcontains(local.lab_realm_config, "\"webAuthnPolicyRpId\": \"id.staging.glab.lol\"")
+    error_message = "The WebAuthn RP ID should follow the private hostname override."
+  }
+
+  assert {
     condition     = local.acme_challenge_record_name == "_acme-challenge.id.staging.acme.glab.lol"
     error_message = "The delegated ACME challenge record should follow the private hostname override."
   }
@@ -374,5 +414,37 @@ run "reject_non_keycloak_secret_path" {
 
   expect_failures = [
     var.bootstrap_secret_path,
+  ]
+}
+
+run "reject_non_keycloak_config_secret_path" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    config_secret_path = "network/vyos/admin.sops.yaml"
+  }
+
+  expect_failures = [
+    var.config_secret_path,
+  ]
+}
+
+run "reject_unpinned_keycloak_config_cli_image" {
+  command = plan
+
+  providers = {
+    aws = aws.mock
+  }
+
+  variables {
+    keycloak_config_cli_image = "quay.io/adorsys/keycloak-config-cli:latest-26"
+  }
+
+  expect_failures = [
+    var.keycloak_config_cli_image,
   ]
 }

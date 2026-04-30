@@ -13,9 +13,9 @@ This stack creates:
 - a GitHub token broker Lambda, sourced from `meigma/github-token-broker`, for short-lived `GilmanLab/secrets` access
 - Keycloak instance-role permission to invoke the token broker
 - Keycloak instance-role permission to decrypt only SOPS secrets with `Repo=GilmanLab/secrets` and `Scope=keycloak`
-- Ignition-managed systemd units for Postgres, Keycloak, Traefik, and bootstrap secret fetches
+- Ignition-managed systemd units for Postgres, Keycloak, Traefik, bootstrap secret fetches, and first-boot realm configuration
 
-This stack intentionally stops at starting Keycloak. It does **not** configure realms, GitHub OIDC, clients, backups, Synology sync, Kubernetes OIDC, Argo CD, Grafana, IAM Identity Center federation, or `keycloak-config-cli`.
+This stack configures only the initial `lab` realm and one local admin account with password plus WebAuthn/YubiKey enrollment. It does **not** configure GitHub OIDC, service clients, backups, Synology sync, Kubernetes OIDC, Argo CD, Grafana, or IAM Identity Center federation.
 
 Traefik obtains the `id.glab.lol` certificate from Let's Encrypt through DNS-01. Cloudflare delegates `_acme-challenge.id.glab.lol` to the public Route 53 `acme.glab.lol` zone, and the Keycloak instance role may mutate only the delegated TXT record for this hostname.
 
@@ -36,6 +36,24 @@ secrets get services/keycloak/bootstrap.sops.yaml \
 
 Plaintext bootstrap material is written only under `/run/glab/keycloak`. The persistent data volume stores Postgres state in `/var/lib/keycloak/postgres` and ACME state in `/var/lib/keycloak/acme`; the Postgres directory is owned by the container's Postgres UID.
 
+`glab-keycloak-config.service` runs once after Keycloak is healthy. It fetches
+`services/keycloak/admin.sops.yaml` through the same broker-backed `labctl`
+path, writes `/run/glab/keycloak/admin.env`, then runs pinned
+`keycloak-config-cli` to create the `lab` realm, local admin user, and
+touch-only WebAuthn policy. The service writes
+`/var/lib/keycloak/config/lab-realm-imported` after a successful import so it
+does not run again on reboot.
+
+After enrolling and validating the admin YubiKey in the browser, disable the
+temporary master bootstrap admin manually:
+
+```sh
+aws ssm send-command \
+  --document-name AWS-RunShellScript \
+  --targets Key=instanceids,Values="$(tofu output -raw instance_id)" \
+  --parameters commands='["systemctl start glab-keycloak-disable-bootstrap-admin.service"]'
+```
+
 ## Prerequisites
 
 - OpenTofu `>= 1.10`
@@ -50,6 +68,7 @@ Plaintext bootstrap material is written only under `/run/glab/keycloak`. The per
 - `gh` and `sha256sum` on the apply host so the broker module can download and verify the pinned release asset
 - Cloudflare delegates `acme.glab.lol` to the `aws/lab-foundation` `acme_zone_name_servers` output and sets `_acme-challenge.id.glab.lol` as a CNAME to `_acme-challenge.id.acme.glab.lol`
 - `secrets/services/keycloak/bootstrap.sops.yaml` exists in `GilmanLab/secrets` with SOPS KMS context `Repo=GilmanLab/secrets` and `Scope=keycloak`
+- `secrets/services/keycloak/admin.sops.yaml` exists in `GilmanLab/secrets` with SOPS KMS context `Repo=GilmanLab/secrets` and `Scope=keycloak`
 
 The expected local operator flow is to export both AWS values via `direnv`.
 
@@ -96,9 +115,12 @@ aws ssm send-command \
   --targets Key=instanceids,Values="$(tofu output -raw instance_id)" \
   --parameters commands='[
     "systemctl is-active glab-keycloak-bootstrap.service glab-keycloak-postgres.service glab-keycloak.service glab-keycloak-traefik.service",
+    "systemctl is-active glab-keycloak-config.service || systemctl status --no-pager glab-keycloak-config.service",
     "findmnt /var/lib/keycloak",
     "stat -c %a\\ %s\\ %n /run/glab/keycloak/stack.env",
+    "stat -c %a\\ %s\\ %n /run/glab/keycloak/admin.env",
     "cut -d= -f1 /run/glab/keycloak/stack.env | sort",
+    "cut -d= -f1 /run/glab/keycloak/admin.env | sort",
     "curl -fsS http://127.0.0.1:9000/health/ready"
   ]'
 ```

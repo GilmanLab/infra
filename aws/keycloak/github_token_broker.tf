@@ -1,7 +1,5 @@
 module "github_token_broker" {
-  # Pin the module to the merged provider-v5 compatibility fix until the next
-  # meigma/github-token-broker release can carry it as a tag.
-  source = "github.com/meigma/github-token-broker//terraform?ref=a6cc7dd4e9b804260530d20440b4a08d852a6a01"
+  source = "github.com/meigma/github-token-broker//terraform?ref=v2.0.0"
 
   function_name    = var.github_token_broker_function_name
   repository_owner = "GilmanLab"

@@ -148,7 +148,7 @@ run "plan_defaults" {
   }
 
   assert {
-    condition     = module.github_token_broker.deployed_version == "v1.1.0"
+    condition     = module.github_token_broker.deployed_version == "v2.0.0"
     error_message = "The Keycloak stack should pin the current broker release."
   }
 

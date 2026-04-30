@@ -1,0 +1,15 @@
+[Unit]
+Description=Keycloak Traefik container
+Requires=docker.service ${network_unit_name} ${data_unit_name} ${keycloak_unit_name}
+After=docker.service ${network_unit_name} ${data_unit_name} ${keycloak_unit_name}
+
+[Service]
+Restart=always
+RestartSec=10
+ExecStart=${helper_script_dir}/run-traefik.sh
+ExecStop=-/usr/bin/docker stop keycloak-traefik
+ExecStopPost=-/usr/bin/docker rm -f keycloak-traefik
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

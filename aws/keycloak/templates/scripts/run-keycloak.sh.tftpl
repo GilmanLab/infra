@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+. '${bootstrap_output_path}'
+umask 077
+{
+  printf 'POSTGRES_DB=%s\n' "$POSTGRES_DB"
+  printf 'POSTGRES_USER=%s\n' "$POSTGRES_USER"
+  printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+  printf 'KC_BOOTSTRAP_ADMIN_USERNAME=%s\n' "$KC_BOOTSTRAP_ADMIN_USERNAME"
+  printf 'KC_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "$KC_BOOTSTRAP_ADMIN_PASSWORD"
+  printf 'KC_HEAP_MIN=%s\n' "$KC_HEAP_MIN"
+  printf 'KC_HEAP_MAX=%s\n' "$KC_HEAP_MAX"
+  printf 'KC_DB=postgres\n'
+  printf 'KC_DB_URL=jdbc:postgresql://postgres:5432/%s\n' "$POSTGRES_DB"
+  printf 'KC_DB_USERNAME=%s\n' "$POSTGRES_USER"
+  printf 'KC_DB_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+  printf 'KC_HEALTH_ENABLED=true\n'
+  printf 'KC_HOSTNAME=https://%s\n' "$KC_HOSTNAME"
+  printf 'KC_HTTP_ENABLED=true\n'
+  printf 'KC_PROXY_HEADERS=xforwarded\n'
+  printf 'JAVA_OPTS_KC_HEAP=-Xms%s -Xmx%s\n' "$KC_HEAP_MIN" "$KC_HEAP_MAX"
+} >'${keycloak_env_path}'
+chmod 0600 '${keycloak_env_path}'
+
+/usr/bin/docker rm -f keycloak >/dev/null 2>&1 || true
+exec /usr/bin/docker run \
+  --name keycloak \
+  --network keycloak \
+  --network-alias keycloak \
+  --env-file '${keycloak_env_path}' \
+  --publish 127.0.0.1:9000:9000 \
+  --pull always \
+  '${keycloak_image}' \
+  start

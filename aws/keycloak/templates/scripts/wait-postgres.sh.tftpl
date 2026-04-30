@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+i=0
+while [ "$i" -lt 90 ]; do
+  if /usr/bin/docker exec keycloak-postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+    exit 0
+  fi
+  i=$((i + 1))
+  sleep 2
+done
+
+echo "postgres did not become ready" >&2
+exit 1

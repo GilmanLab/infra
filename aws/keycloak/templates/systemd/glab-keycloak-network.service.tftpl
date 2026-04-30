@@ -1,0 +1,13 @@
+[Unit]
+Description=Create Keycloak Docker network
+Requires=docker.service
+After=docker.service
+Before=${postgres_unit_name} ${keycloak_unit_name} ${traefik_unit_name}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${helper_script_dir}/create-network.sh
+
+[Install]
+WantedBy=multi-user.target

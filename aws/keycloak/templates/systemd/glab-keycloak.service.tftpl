@@ -1,0 +1,17 @@
+[Unit]
+Description=Keycloak container
+Requires=docker.service ${network_unit_name} ${bootstrap_unit_name} ${postgres_unit_name}
+After=docker.service ${network_unit_name} ${bootstrap_unit_name} ${postgres_unit_name}
+
+[Service]
+Restart=always
+RestartSec=10
+EnvironmentFile=${bootstrap_output_path}
+ExecStartPre=${helper_script_dir}/wait-postgres.sh
+ExecStart=${helper_script_dir}/run-keycloak.sh
+ExecStop=-/usr/bin/docker stop keycloak
+ExecStopPost=-/usr/bin/docker rm -f keycloak
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

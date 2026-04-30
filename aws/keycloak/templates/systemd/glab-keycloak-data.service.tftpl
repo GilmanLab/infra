@@ -1,0 +1,11 @@
+[Unit]
+Description=Prepare Keycloak data volume
+Before=${bootstrap_unit_name} ${postgres_unit_name} ${traefik_unit_name}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${helper_script_dir}/prepare-data.sh
+
+[Install]
+WantedBy=multi-user.target

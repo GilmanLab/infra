@@ -1,0 +1,17 @@
+[Unit]
+Description=Fetch Keycloak bootstrap secrets with labctl
+Wants=network-online.target
+Requires=docker.service ${data_unit_name}
+After=network-online.target docker.service ${data_unit_name}
+Before=${postgres_unit_name} ${keycloak_unit_name} ${traefik_unit_name}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/usr/bin/mkdir -p ${bootstrap_runtime_dir}
+ExecStartPre=/usr/bin/chmod 0700 ${bootstrap_runtime_dir}
+ExecStartPre=/usr/bin/rm -f ${bootstrap_output_path} ${keycloak_env_path}
+ExecStart=/usr/bin/docker run --rm --network host --user 0:0 -v ${bootstrap_runtime_dir}:${bootstrap_runtime_dir} ${labctl_image} secrets get ${bootstrap_secret_path} --source github --field ${bootstrap_field} --output ${bootstrap_output_path} --aws-region ${aws_region} --broker-function ${github_token_broker_function_name}
+
+[Install]
+WantedBy=multi-user.target

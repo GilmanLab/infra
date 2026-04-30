@@ -33,6 +33,7 @@ tasks:
       - '.gitignore'
       - 'Justfile'
       - 'README.md'
+      - '*.yaml'
       - '*.cue'
       - 'scripts/imagectl.py'
     options:

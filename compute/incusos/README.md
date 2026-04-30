@@ -7,8 +7,9 @@ It now has a strict split:
 
 - CUE is the only manifest source of truth.
 - `kubectl` consumes `cue export` output directly.
-- the only imperative helper is `scripts/imagectl.py`, which handles image
-  build and VyOS staging.
+- `labctl` builds the seeded IncusOS image from the shared schema input.
+- the remaining imperative helper is `scripts/imagectl.py`, which stages the
+  built image to VyOS.
 
 The first supported host flow is `um760`. The `ms02-*` host data still exists
 in CUE, but joiner export fails deliberately until that flow is implemented.
@@ -16,12 +17,13 @@ in CUE, but joiner export fails deliberately until that flow is implemented.
 ## Layout
 
 - [`config.cue`](./config.cue) stores shared defaults, host data, host
-  selection, and the concrete `imageBuildConfig` export.
+  selection, and the Tinkerbell manifest inputs.
+- [`image-build.um760.yaml`](./image-build.um760.yaml) is the `labctl`
+  IncusOS image build input for the first supported host.
 - [`manifests.cue`](./manifests.cue) defines the Tinkerbell `Hardware`,
   `Template`, and `Workflow` objects and the manifest stream export.
-- [`scripts/imagectl.py`](./scripts/imagectl.py) builds the seeded IncusOS
-  image and stages it to VyOS. It does not render manifests or own kubectl
-  orchestration.
+- [`scripts/imagectl.py`](./scripts/imagectl.py) stages the built image to
+  VyOS. It does not render manifests or own kubectl orchestration.
 - [`Justfile`](./Justfile) is the operator entrypoint.
 
 ## Secrets
@@ -66,11 +68,13 @@ just apply
 just delete
 ```
 
-Build the local first-node operation image:
+Build the local first-node operation image with `labctl`:
 
 ```sh
 GLAB_SECRETS_DIR=/path/to/secrets just image-build
 ```
+
+Set `LABCTL=/path/to/labctl` when the binary is not already on `PATH`.
 
 Stage the built image to the VyOS artifact directory served on LAB_PROV:
 

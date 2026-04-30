@@ -12,7 +12,7 @@ vet:
 
 # Build the seeded IncusOS operation image locally.
 image-build host="um760":
-    @proto run cue -- export . -e imageBuildConfig --out json -t host={{host}} | uv run scripts/imagectl.py build
+    @${LABCTL:-labctl} bootstrap incusos image build image-build.{{host}}.yaml
 
 # Copy the built image to the VyOS artifact directory served on LAB_PROV.
 image-stage-vyos host="um760":

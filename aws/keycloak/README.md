@@ -56,12 +56,22 @@ If the old Lambda is still active, retire it before applying this stack:
 ```sh
 cd ../github-token-broker
 just init
-tofu destroy
+tofu plan -destroy \
+  -target=aws_lambda_function.broker \
+  -target=aws_cloudwatch_log_group.broker \
+  -target=aws_iam_policy.invoke \
+  -target=aws_iam_role.execution \
+  -target=aws_iam_role.publisher \
+  -target=aws_iam_role_policy.execution_logs \
+  -target=aws_iam_role_policy.execution_ssm \
+  -target=aws_iam_role_policy.publisher \
+  -out=destroy-broker-only.tfplan
+tofu apply destroy-broker-only.tfplan
 ```
 
-Then apply `aws/keycloak`. This preserves one live owner for the broker
-resources and lets Keycloak's stack recreate the Lambda from the current
-`meigma/github-token-broker` release.
+Then apply `aws/keycloak`. This removes the legacy Lambda resources while
+leaving the GitHub Actions OIDC provider alone; only run a full destroy after
+confirming that provider has no shared use.
 
 ## Usage
 

@@ -110,6 +110,33 @@
       "config": {}
     }
   ],
+  "clients": [
+    {
+      "clientId": "incus",
+      "name": "Incus",
+      "description": "Public OIDC client for Incus human authentication.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "frontchannelLogout": false,
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "true"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    }
+  ],
   "users": [
     {
       "username": "$(env:KEYCLOAK_LOCAL_ADMIN_USERNAME)",

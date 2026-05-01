@@ -30,6 +30,66 @@ apply host="um760":
 delete host="um760":
     @proto run cue -- export . -e kubernetesYAML --out text -t host={{host}} | kubectl delete --ignore-not-found=true -f -
 
+# Report the UM760 link mode, bridge membership, listener ownership, and Tinkerbell state.
+um760-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    link_mode="../../network/vyos/scripts/um760_link_mode.py"
+    ssh_key="${VYOS_SSH_KEY:-$HOME/.ssh/vyos-gateway}"
+    ssh_target="${VYOS_USER:-vyos}@${VYOS_HOST:-10.0.0.2}"
+    ssh_base=(ssh -i "$ssh_key" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$ssh_target")
+    kubectl="sudo podman exec bootstrap-k0s k0s kubectl"
+
+    python3 "$link_mode" status
+    echo
+    "${ssh_base[@]}" "$kubectl -n tinkerbell get deployment,pod,workflow,hardware,template -o wide"
+
+# Preflight the bootstrap stack and move the UM760-facing link to untagged LAB_PROV.
+um760-provision host="um760":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    link_mode="../../network/vyos/scripts/um760_link_mode.py"
+    ssh_key="${VYOS_SSH_KEY:-$HOME/.ssh/vyos-gateway}"
+    ssh_target="${VYOS_USER:-vyos}@${VYOS_HOST:-10.0.0.2}"
+    ssh_base=(ssh -i "$ssh_key" -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new "$ssh_target")
+    kubectl="sudo podman exec bootstrap-k0s k0s kubectl"
+    artifact_url="$(proto run cue -- export . -e imageBuildConfig.image.artifactURL --out text -t host={{host}})"
+
+    "${ssh_base[@]}" "$kubectl -n tinkerbell rollout status deployment/tinkerbell --timeout=120s"
+    "${ssh_base[@]}" "$kubectl -n tinkerbell rollout status deployment/hookos --timeout=120s"
+
+    workflow_state="$("${ssh_base[@]}" "$kubectl -n tinkerbell get workflow incusos-operation-{{host}} -o jsonpath='{.status.state}'")"
+    case "$workflow_state" in
+      PENDING|RUNNING) ;;
+      *)
+        echo "workflow incusos-operation-{{host}} is not ready to provision: state=$workflow_state" >&2
+        exit 1
+        ;;
+    esac
+
+    "${ssh_base[@]}" "curl -fsSI --max-time 10 '$artifact_url' >/dev/null"
+    python3 "$link_mode" provision
+    echo
+    status_output="$(python3 "$link_mode" status)"
+    printf '%s\n' "$status_output"
+    grep -Eq '^br20 members:.*eth2' <<<"$status_output"
+    ! grep -Eq '^br10 members:.*eth2\.10' <<<"$status_output"
+
+# Restore the UM760-facing link to tagged LAB_MGMT and report current reachability evidence.
+um760-mgmt:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    link_mode="../../network/vyos/scripts/um760_link_mode.py"
+    python3 "$link_mode" mgmt
+    echo
+    status_output="$(python3 "$link_mode" status)"
+    printf '%s\n' "$status_output"
+    grep -Eq '^br10 members:.*eth2\.10' <<<"$status_output"
+    ! grep -Eq '^br20 members:.*eth2(,|$)' <<<"$status_output"
+    if ! grep -qi '38:05:25:34:25:d0' <<<"$status_output"; then
+      echo "UM760 MAC is not observed yet; it may still be off, booting, or not using LAB_MGMT." >&2
+    fi
+
 # Remove disposable local build state.
 clean:
     @rm -rf .state

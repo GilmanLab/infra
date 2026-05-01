@@ -1,5 +1,5 @@
 ---
-bootstrap_k0s_image: ghcr.io/gilmanlab/platform/bootstrap-k0s:0.1.0
+bootstrap_k0s_image: ghcr.io/gilmanlab/platform/bootstrap-k0s:0.2.0
 bootstrap_k0s_provisioning_ip: 10.10.20.1
 bootstrap_k0s_artifacts_file_server: http://10.10.20.1:7173
 bootstrap_k0s_dhcp_bind_interface: eth1.20

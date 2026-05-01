@@ -32,10 +32,20 @@ tasks:
       cache: false
       runInCI: true
 
+  check-scripts:
+    command: 'python3 -m py_compile scripts/um760_link_mode.py'
+    toolchains: 'system'
+    inputs:
+      - 'scripts/um760_link_mode.py'
+    options:
+      cache: false
+      runInCI: true
+
   check:
     deps:
       - 'check-init'
       - 'check-playbook'
+      - 'check-scripts'
     command: 'true'
     toolchains: 'system'
     inputs: []

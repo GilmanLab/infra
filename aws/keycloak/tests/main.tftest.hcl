@@ -142,6 +142,11 @@ run "plan_defaults" {
   }
 
   assert {
+    condition     = strcontains(local.run_config_script, "KEYCLOAK_LOGINREALM='lab'") && strcontains(local.run_config_script, "KEYCLOAK_CLIENTID='glab-keycloak-config'") && strcontains(local.run_config_script, "KEYCLOAK_CLIENTSECRET=\"$KEYCLOAK_CONFIG_CLIENT_SECRET\"") && strcontains(local.run_config_script, "KEYCLOAK_GRANTTYPE='client_credentials'")
+    error_message = "The config script should use the dedicated config service account after the first successful hash-marked import."
+  }
+
+  assert {
     condition     = !strcontains(local.config_unit, "ConditionPathExists")
     error_message = "The config unit should run on boot and let the config script decide whether the realm config changed."
   }
@@ -164,6 +169,16 @@ run "plan_defaults" {
   assert {
     condition     = strcontains(local.lab_realm_config, "\"username\": \"$(env:KEYCLOAK_LOCAL_ADMIN_USERNAME)\"") && strcontains(local.lab_realm_config, "\"value\": \"$(env:KEYCLOAK_LOCAL_ADMIN_PASSWORD)\"") && strcontains(local.lab_realm_config, "\"webauthn-register\"")
     error_message = "The realm config should create the local admin from runtime env and require WebAuthn registration."
+  }
+
+  assert {
+    condition     = strcontains(local.lab_realm_config, "\"clientId\": \"glab-keycloak-config\"") && strcontains(local.lab_realm_config, "\"serviceAccountsEnabled\": true") && strcontains(local.lab_realm_config, "\"secret\": \"$(env:KEYCLOAK_CONFIG_CLIENT_SECRET)\"")
+    error_message = "The realm config should define a confidential service account client for future config imports."
+  }
+
+  assert {
+    condition     = strcontains(local.lab_realm_config, "\"username\": \"service-account-glab-keycloak-config\"") && strcontains(local.lab_realm_config, "\"serviceAccountClientId\": \"glab-keycloak-config\"") && strcontains(local.lab_realm_config, "\"realm-admin\"")
+    error_message = "The config service account should receive realm-admin privileges through realm-management."
   }
 
   assert {

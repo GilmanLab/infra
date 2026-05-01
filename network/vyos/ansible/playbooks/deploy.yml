@@ -451,7 +451,7 @@
               - "{{ ansible_user }}@{{ ansible_host }}"
               - "sudo {{ remote_dns_mirror_fetch_script_path }}"
 
-        - name: Ensure IPv4 TCP MSS nftables chain exists before interface commit
+        - name: Ensure IPv4 raw nftables chains exist before interface commit
           delegate_to: localhost
           ansible.builtin.command:
             argv:
@@ -465,7 +465,9 @@
               - "{{ ansible_user }}@{{ ansible_host }}"
               - >-
                 sudo nft list chain ip raw VYOS_TCP_MSS >/dev/null 2>&1 ||
-                sudo nft 'add chain ip raw VYOS_TCP_MSS { type filter hook postrouting priority raw; policy accept; }'
+                sudo nft 'add chain ip raw VYOS_TCP_MSS { type filter hook postrouting priority raw; policy accept; }';
+                sudo nft list chain ip raw vyos_rpfilter >/dev/null 2>&1 ||
+                sudo nft 'add chain ip raw vyos_rpfilter { type filter hook prerouting priority raw; policy accept; }'
           changed_when: false
 
         - name: Load, commit, and save configuration

@@ -486,7 +486,7 @@
             delay: 5
             timeout: 90
 
-        - name: Reload and start bootstrap-k0s service
+        - name: Reload and restart bootstrap-k0s service
           delegate_to: localhost
           ansible.builtin.command:
             argv:
@@ -500,7 +500,8 @@
               - "{{ ansible_user }}@{{ ansible_host }}"
               - >-
                 sudo systemctl daemon-reload &&
-                sudo systemctl enable --now bootstrap-k0s.service
+                sudo systemctl enable bootstrap-k0s.service &&
+                sudo systemctl restart bootstrap-k0s.service
 
         - name: Verify IncusOS artifact server responds on LAB_PROV
           delegate_to: localhost

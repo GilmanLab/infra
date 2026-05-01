@@ -88,7 +88,17 @@ class VyOSClient:
         command = f"/bin/vbash -ic {shlex.quote('show configuration commands')}"
         return self.run(command).stdout
 
+    def ensure_raw_chains(self) -> None:
+        command = (
+            "sudo nft list chain ip raw VYOS_TCP_MSS >/dev/null 2>&1 || "
+            "sudo nft 'add chain ip raw VYOS_TCP_MSS { type filter hook postrouting priority raw; policy accept; }'; "
+            "sudo nft list chain ip raw vyos_rpfilter >/dev/null 2>&1 || "
+            "sudo nft 'add chain ip raw vyos_rpfilter { type filter hook prerouting priority raw; policy accept; }'"
+        )
+        self.run(command)
+
     def apply_config_commands(self, commands: list[str]) -> None:
+        self.ensure_raw_chains()
         script = "\n".join(
             [
                 "source /opt/vyatta/etc/functions/script-template",
@@ -100,7 +110,10 @@ class VyOSClient:
                 "exit",
             ]
         )
-        self.run("/bin/vbash -s", input_text=f"{script}\n")
+        result = self.run("/bin/vbash -s", input_text=f"{script}\n")
+        output = "\n".join(part for part in (result.stdout, result.stderr) if part)
+        if "Commit failed" in output:
+            raise RuntimeError(output.strip())
 
 
 def bridge_members(config: str, bridge: str) -> list[str]:

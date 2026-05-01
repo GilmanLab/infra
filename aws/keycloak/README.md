@@ -44,7 +44,9 @@ matches. When the hash changes, it fetches
 path, writes `/run/glab/keycloak/admin.env`, then runs pinned
 `keycloak-config-cli` to create the `lab` realm, local admin user, and
 touch-only WebAuthn policy. It also creates the public `incus` OIDC client with
-OAuth 2.0 Device Authorization Grant enabled. The service writes the new
+OAuth 2.0 Device Authorization Grant enabled and the confidential
+`glab-keycloak-config` service account used for later imports after the
+temporary master bootstrap admin is disabled. The service writes the new
 realm-config hash only after a successful import.
 
 The follow-up Incus-side OIDC values are:

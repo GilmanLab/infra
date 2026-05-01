@@ -33,6 +33,7 @@ fi
   --aws-region '${aws_region}' \
   --broker-function '${github_token_broker_function_name}'
 chmod 0600 '${config_output_path}'
+. '${config_output_path}'
 
 deadline=$(( $(date +%s) + 300 ))
 until /usr/bin/curl -fsS http://127.0.0.1:9000/health/ready >/dev/null; do
@@ -43,23 +44,36 @@ until /usr/bin/curl -fsS http://127.0.0.1:9000/health/ready >/dev/null; do
   sleep 5
 done
 
-/usr/bin/docker rm -f keycloak-config-cli >/dev/null 2>&1 || true
-/usr/bin/docker run --rm \
-  --name keycloak-config-cli \
-  --network keycloak \
-  --user 0:0 \
-  --env-file '${config_output_path}' \
-  -e KEYCLOAK_URL='http://keycloak:8080' \
-  -e KEYCLOAK_USER="$KC_BOOTSTRAP_ADMIN_USERNAME" \
-  -e KEYCLOAK_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD" \
-  -e KEYCLOAK_LOGINREALM='master' \
-  -e KEYCLOAK_AVAILABILITYCHECK_ENABLED='true' \
-  -e KEYCLOAK_AVAILABILITYCHECK_TIMEOUT='120s' \
-  -e IMPORT_FILES_LOCATIONS='/config/lab-realm.json' \
-  -e IMPORT_VARSUBSTITUTION_ENABLED='true' \
-  -e IMPORT_VARSUBSTITUTION_UNDEFINEDISERROR='true' \
-  -v '${keycloak_realm_config_path}:/config/lab-realm.json:ro' \
-  '${keycloak_config_cli_image}'
+run_import() {
+  /usr/bin/docker rm -f keycloak-config-cli >/dev/null 2>&1 || true
+  /usr/bin/docker run --rm \
+    --name keycloak-config-cli \
+    --network keycloak \
+    --user 0:0 \
+    --env-file '${config_output_path}' \
+    "$@" \
+    -e KEYCLOAK_URL='http://keycloak:8080' \
+    -e KEYCLOAK_AVAILABILITYCHECK_ENABLED='true' \
+    -e KEYCLOAK_AVAILABILITYCHECK_TIMEOUT='120s' \
+    -e IMPORT_FILES_LOCATIONS='/config/lab-realm.json' \
+    -e IMPORT_VARSUBSTITUTION_ENABLED='true' \
+    -e IMPORT_VARSUBSTITUTION_UNDEFINEDISERROR='true' \
+    -v '${keycloak_realm_config_path}:/config/lab-realm.json:ro' \
+    '${keycloak_config_cli_image}'
+}
+
+if [ -f '${keycloak_config_marker_path}' ]; then
+  run_import \
+    -e KEYCLOAK_LOGINREALM='lab' \
+    -e KEYCLOAK_CLIENTID='glab-keycloak-config' \
+    -e KEYCLOAK_CLIENTSECRET="$KEYCLOAK_CONFIG_CLIENT_SECRET" \
+    -e KEYCLOAK_GRANTTYPE='client_credentials'
+else
+  run_import \
+    -e KEYCLOAK_LOGINREALM='master' \
+    -e KEYCLOAK_USER="$KC_BOOTSTRAP_ADMIN_USERNAME" \
+    -e KEYCLOAK_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD"
+fi
 
 printf '%s\n' "$desired_hash" >'${keycloak_config_marker_path}'
 chmod 0600 '${keycloak_config_marker_path}'

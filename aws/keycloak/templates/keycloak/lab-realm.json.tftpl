@@ -112,6 +112,22 @@
   ],
   "clients": [
     {
+      "clientId": "glab-keycloak-config",
+      "name": "glab Keycloak Config",
+      "description": "Confidential automation client for applying declarative lab realm configuration.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "frontchannelLogout": false,
+      "secret": "$(env:KEYCLOAK_CONFIG_CLIENT_SECRET)"
+    },
+    {
       "clientId": "incus",
       "name": "Incus",
       "description": "Public OIDC client for Incus human authentication.",
@@ -138,6 +154,16 @@
     }
   ],
   "users": [
+    {
+      "username": "service-account-glab-keycloak-config",
+      "enabled": true,
+      "serviceAccountClientId": "glab-keycloak-config",
+      "clientRoles": {
+        "realm-management": [
+          "realm-admin"
+        ]
+      }
+    },
     {
       "username": "$(env:KEYCLOAK_LOCAL_ADMIN_USERNAME)",
       "email": "$(env:KEYCLOAK_LOCAL_ADMIN_EMAIL)",

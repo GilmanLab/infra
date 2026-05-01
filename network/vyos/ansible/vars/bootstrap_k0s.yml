@@ -1,5 +1,5 @@
 ---
-bootstrap_k0s_image: ghcr.io/gilmanlab/platform/bootstrap-k0s:0.1.0
+bootstrap_k0s_image: ghcr.io/gilmanlab/platform/bootstrap-k0s:0.2.1
 bootstrap_k0s_provisioning_ip: 10.10.20.1
 bootstrap_k0s_artifacts_file_server: http://10.10.20.1:7173
 bootstrap_k0s_dhcp_bind_interface: eth1.20
@@ -7,8 +7,8 @@ bootstrap_k0s_pod_cidr: 10.244.0.0/16
 bootstrap_k0s_service_cidr: 10.96.0.0/12
 bootstrap_k0s_trusted_proxies: 10.244.0.0/16,10.96.0.0/12
 bootstrap_k0s_env_path: /config/containers/bootstrap-k0s/bootstrap-k0s.env
-bootstrap_k0s_data_dir: /config/containers/bootstrap-k0s/data
-bootstrap_k0s_pods_dir: /config/containers/bootstrap-k0s/pods
+bootstrap_k0s_data_dir: /usr/lib/live/mount/persistence/container/bootstrap-k0s/data
+bootstrap_k0s_pods_dir: /usr/lib/live/mount/persistence/container/bootstrap-k0s/pods
 bootstrap_k0s_systemd_unit_path: /etc/systemd/system/bootstrap-k0s.service
 
 incusos_artifacts_image: docker.io/python:3.13.7-alpine3.22

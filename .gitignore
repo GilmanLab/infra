@@ -7,6 +7,10 @@
 .env.*
 .envrc
 
+# OpenTofu local artifacts retained after root migration
+**/.terraform/
+**/tfplan
+
 # Go
 bin/
 cover.out

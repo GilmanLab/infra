@@ -7,6 +7,13 @@ The first active project is `network/vyos`, which holds the VyOS gateway
 configuration and validation flow. Additional infrastructure domains can be
 added as separate Moon projects without reworking the repository baseline.
 
+## AWS Infrastructure Migration
+
+AWS and Tailscale OpenTofu roots moved to the private
+[`GilmanLab/aws`](https://github.com/GilmanLab/aws) repository on 2026-08-19.
+This repository is no longer an infrastructure writer for those state objects.
+Do not restore or apply the removed roots from Git history.
+
 ## Quick Start
 
 Prerequisites:
@@ -29,13 +36,9 @@ moon run network-vyos:check
 
 ## Current Projects
 
-- `aws/lab-foundation`: OpenTofu for the base VPC, DNS, and KMS primitives in the lab AWS account
-- `aws/subnet-router`: OpenTofu for the AWS EC2 subnet router that joins Tailscale using AWS workload identity federation
 - `compute/incusos`: IncusOS host bootstrap inputs; currently pivoting from
   the UM760/Tinkerbell path to the N5 Pro genesis node
-- `network/tailscale`: Tailscale DNS settings managed via OpenTofu
 - `network/vyos`: VyOS gateway automation, config, and static validation
-- `security/pki/root-ca`: OpenTofu for the offline-by-policy root CA KMS key
 
 ## Support
 
